@@ -44,8 +44,4 @@ static async Task MainMethodAsync()
 
         Console.WriteLine(ex.Message);
     }
-    finally
-    {
-        Console.Read();
-    }
 }
