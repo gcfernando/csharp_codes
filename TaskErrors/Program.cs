@@ -1,4 +1,6 @@
-﻿// Developer ::> Gehan Fernando
+// Developer ::> Gehan Fernando
+
+using System;
 
 await MainMethodAsync();
 
@@ -16,22 +18,36 @@ static async Task MethodTwoAsync()
 
 static async Task MainMethodAsync()
 {
-    var taskOne = MethodOneAsync();
-    var taskTwo = MethodTwoAsync();
-
-    var tasks = new Task[] { taskOne, taskTwo };
+    var tasks = new List<Task>();
 
     try
     {
-        await Task.WhenAll(taskOne, taskTwo);
+        var taskOne = MethodOneAsync();
+        var taskTwo = MethodTwoAsync();
+
+        tasks.Add(taskOne);
+        tasks.Add(taskTwo);
+
+        await Task.WhenAll(tasks.ToArray());
     }
-    catch
+    catch (Exception ex)
     {
         var exceptions = tasks.SelectMany(task => task.Exception?.InnerExceptions ?? Enumerable.Empty<Exception>());
 
-        foreach (var exception in exceptions)
+        if (exceptions?.Any() == true)
         {
-            Console.WriteLine(exception.Message);
+            foreach (var exception in exceptions)
+            {
+                Console.WriteLine(exception.Message);
+            }
+
+            return;
         }
+
+        Console.WriteLine(ex.Message);
+    }
+    finally
+    {
+        Console.Read();
     }
 }
