@@ -1,7 +1,5 @@
 // Developer ::> Gehan Fernando
 
-using System;
-
 await MainMethodAsync();
 
 static async Task MethodOneAsync()
