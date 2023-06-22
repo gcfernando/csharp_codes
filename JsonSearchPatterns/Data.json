@@ -1,0 +1,80 @@
+{
+    "age": 30,
+    "communication": {
+        "addresses": {
+            "emailAddresses": [
+                {
+                    "email": "johndoe@example.com",
+                    "type": "personal"
+                },
+                {
+                    "email": "johndoe@microsoft.com",
+                    "type": "work"
+                }
+            ],
+            "location": [
+                {
+                    "city": "New York",
+                    "coordinates": {
+                        "latitude": 40.7128,
+                        "longitude": -74.006
+                    },
+                    "postalCode": "10001",
+                    "street": "123 Main St",
+                    "type": "permenent"
+                },
+                {
+                    "city": "Los Angeles",
+                    "coordinates": {
+                        "latitude": 34.0522,
+                        "longitude": -118.2437
+                    },
+                    "postalCode": "90001",
+                    "street": "456 Elm St",
+                    "type": "current"
+                }
+            ]
+        },
+        "phoneNumbers": {
+            "pastUsed": [
+                "+1 987-654-3210",
+                "+1 555-123-4567"
+            ],
+            "personal": [
+                {
+                    "number": "+1 123-456-7890",
+                    "type": "dayTime"
+                },
+                {
+                    "number": "+1 123-789-7890",
+                    "type": "official"
+                }
+            ],
+            "work": {
+                "number": "+1 123-999-7890"
+            }
+        }
+    },
+    "education": {
+        "institution": {
+            "degrees": [
+                {
+                    "name": "Bachelor's",
+                    "year": 2016
+                },
+                {
+                    "name": "Master's",
+                    "year": 2018
+                }
+            ],
+            "location": "CityA",
+            "name": "ABC University"
+        },
+        "major": "Computer Science"
+    },
+    "messageHeader": {
+        "createdDate": "2023-06-23",
+        "id": "3eb5dfe8-66e5-4ac2-999d-43dc34d30149"
+    },
+    "name": "John Doe"
+}
