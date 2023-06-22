@@ -46,7 +46,7 @@
                     "type": "dayTime"
                 },
                 {
-                    "number": "+1 123-789-7890",
+                    "number": "+1 123-789-5590",
                     "type": "official"
                 }
             ],
@@ -76,5 +76,27 @@
         "createdDate": "2023-06-23",
         "id": "3eb5dfe8-66e5-4ac2-999d-43dc34d30149"
     },
-    "name": "John Doe"
+    "name": "John Doe",
+    "parents": [
+        {
+            "relationship": "father",
+            "name": "John Smith",
+            "age": 40,
+            "occupation": "Engineer",
+            "email": "john.smith@example.com"
+        },
+        {
+            "relationship": "mother",
+            "name": "Jane Smith",
+            "age": 38,
+            "occupation": "Teacher",
+            "email": "jane.smith@example.com"
+        }
+    ],
+    "miscellaneous": [
+        {
+            "type": "hobby",
+            "value": "reading books"
+        }
+    ]
 }
