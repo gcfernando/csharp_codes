@@ -1,0 +1,11 @@
+Employee,Age,Salary,Purchased
+Anjali,45,71000,No
+Parul,28,48000,Yes
+Kanisha,31,53000,No
+Parul,35,61000,No
+Kanisha,42,,Yes
+Anjali,35,59000,Yes
+Parul,,53000,No
+Anjali,47,80000,Yes
+Kanisha,51,81000,No
+Anjali,36,68000,Yes
