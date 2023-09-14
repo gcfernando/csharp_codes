@@ -1,0 +1,1 @@
+The C# code enables you to retrieve the user's public IP address asynchronously using the 'ipify' service. After fetching the IP, it displays the result on the console.
