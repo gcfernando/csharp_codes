@@ -17,11 +17,11 @@ static async Task FetchIpAddressAsync()
         var ipAddress = await client.GetStringAsync("http://api.ipify.org");
 
         // Prints the fetched IP address to the console.
-        Console.WriteLine("Your public IP Address: " + ipAddress);
+        Console.WriteLine($"Your public IP Address: {ipAddress}");
     }
     catch (Exception ex)
     {
         // Prints the error message to the console.
-        Console.WriteLine("Error fetching IP Address: " + ex.Message);
+        Console.WriteLine($"Error fetching IP Address: {ex.Message}");
     }
 }
