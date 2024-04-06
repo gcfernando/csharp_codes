@@ -14,8 +14,16 @@ internal class UppercaseNameMiddleware(ILogger<UppercaseNameMiddleware> logger) 
         const string key = "name";
         // Retrieves the HTTP request data from the function context.
         var requestData = await context.GetHttpRequestDataAsync();
+
+        // Copy request body to a MemoryStream
+        await using var memoryStream = new MemoryStream();
+        await requestData.Body.CopyToAsync(memoryStream);
+
+        // Reset the position to the beginning
+        memoryStream.Position = 0;
+
         // Reads the HTTP request body as a string.
-        using var reader = new StreamReader(requestData.Body);
+        using var reader = new StreamReader(memoryStream);
         var body = await reader.ReadToEndAsync();
 
         _logger.LogInformation("Reading HTTP data {body}", body);
@@ -38,8 +46,6 @@ internal class UppercaseNameMiddleware(ILogger<UppercaseNameMiddleware> logger) 
 
         // Adds the updated JObject to the function context's Items dictionary.
         context.Items.Add("updated_body", dataObject);
-
-        _logger.LogInformation("Update context");
 
         // Calls the next function in the pipeline with the updated function context.
         await next.Invoke(context);
