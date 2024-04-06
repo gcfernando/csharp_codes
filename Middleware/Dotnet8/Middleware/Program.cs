@@ -8,7 +8,10 @@ var host = new HostBuilder()
     .ConfigureAppConfiguration(builder =>
         builder.AddEnvironmentVariables())
     .ConfigureFunctionsWebApplication(worker =>
-        worker.UseMiddleware<UppercaseNameMiddleware>())
+    {
+        worker.UseMiddleware<UppercaseNameMiddleware>();
+        worker.UseMiddleware<ExceptionHandlerMiddleware>();
+    })
     .ConfigureServices(services =>
     {
         services.AddApplicationInsightsTelemetryWorkerService();

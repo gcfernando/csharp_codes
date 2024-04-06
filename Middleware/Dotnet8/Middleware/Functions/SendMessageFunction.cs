@@ -20,6 +20,11 @@ public class SendMessageFunction(ILogger<SendMessageFunction> logger)
         // Retrieves the value of the "name" key from the JObject, using the null conditional operator to handle null values.
         var name = dataObject?.name;
 
+        if (name.ToString().Equals("name not found"))
+        {
+            throw new InvalidProcessException("name not found");
+        }
+
         // Generates the response message based on whether the "name" value is empty or not.
         var responseMessage = $"Hello {name}.";
 
