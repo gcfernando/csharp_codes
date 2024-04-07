@@ -9,6 +9,7 @@ var host = new HostBuilder()
         builder.AddEnvironmentVariables())
     .ConfigureFunctionsWebApplication(worker =>
     {
+        // Middleware Sequence
         worker.UseMiddleware<UppercaseNameMiddleware>();
         worker.UseMiddleware<ExceptionHandlerMiddleware>();
     })
