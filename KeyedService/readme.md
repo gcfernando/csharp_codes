@@ -1,0 +1,1 @@
+Keyed services refers to a mechanism for registering and retrieving Dependency Injection (DI) services using keys.
