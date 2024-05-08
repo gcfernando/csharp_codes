@@ -20,7 +20,7 @@ internal class UppercaseNameMiddleware(ILogger<UppercaseNameMiddleware> logger) 
         await requestData.Body.CopyToAsync(memoryStream);
 
         // Reset the position to the beginning
-        memoryStream.Position = 0;
+        memoryStream.Seek(0, SeekOrigin.Begin);
 
         // Reads the HTTP request body as a string.
         using var reader = new StreamReader(memoryStream);
@@ -46,6 +46,9 @@ internal class UppercaseNameMiddleware(ILogger<UppercaseNameMiddleware> logger) 
 
         // Adds the updated JObject to the function context's Items dictionary.
         context.Items.Add("updated_body", dataObject);
+
+        // Reset the position to the beginning
+        memoryStream.Seek(0, SeekOrigin.Begin);
 
         // Calls the next function in the pipeline with the updated function context.
         await next.Invoke(context);
