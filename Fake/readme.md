@@ -1,0 +1,1 @@
+In this code sample, I'll introduce you to FakeLogger and how it can be used to test logging code when using Microsoft.Extensions.Logging and the ILogger interface.
