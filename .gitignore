@@ -20,3 +20,8 @@
 /FourKWinForm/obj
 /Middleware/Dotnet6/.vs
 /FourKWinForm/.vs/ProjectEvaluation
+/Fake/.vs/Fake
+/Fake/Fake.Test/bin
+/Fake/Fake.Test/obj
+/Fake/Fake.Data/bin
+/Fake/Fake.Data/obj
