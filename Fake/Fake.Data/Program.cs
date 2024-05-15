@@ -1,5 +1,4 @@
-﻿using Fake.Data;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace Fake.Data;
 public class Program

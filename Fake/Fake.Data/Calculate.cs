@@ -10,7 +10,7 @@ public class Calculate(ILogger<Program> logger)
         try
         {
             _logger.LogInformation("Dividing {Dividend} with {Divisor}", dividend, divisor);
-            var result =  dividend / divisor;
+            var result = dividend / divisor;
             _logger.LogInformation("Dividing answer {Result}", result);
             return result;
         }
