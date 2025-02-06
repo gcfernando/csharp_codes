@@ -2,12 +2,13 @@
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+const string developerName = "[italic yellow]👨\u200D💻 Developer ::> Gehan Fernando[/]";
+
 while (true)
 {
     AnsiConsole.Clear();
     AnsiConsole.MarkupLine("[bold green]🚀 Starting Data Collection Process...[/]");
 
-    const string developerName = "[italic yellow]👨\u200D💻 Developer ::> Gehan Fernando[/]";
     AnsiConsole.MarkupLine(developerName);
 
     // Live Log Panel
