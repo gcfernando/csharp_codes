@@ -1,0 +1,3 @@
+﻿This is a beautifully designed interactive console application that simulates a real-time data collection process with live logs, progress bars, and a restart option. It provides a visually engaging experience using colorful animations and emojis, making the terminal look modern and dynamic.
+
+Developed by Gehan Fernando, this CLI tool ensures a smooth and intuitive flow, guiding users through each step of the process while keeping things fun and interactive. At the end, users can choose to restart or exit, making it feel like a professional application running inside the terminal. 🚀🎨
