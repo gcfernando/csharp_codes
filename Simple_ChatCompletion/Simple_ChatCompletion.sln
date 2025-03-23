@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35913.81 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Simple_ChatCompletion", "Simple_ChatCompletion.csproj", "{B5C6E948-ED35-45E3-8B3F-F901A588EAE3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B5C6E948-ED35-45E3-8B3F-F901A588EAE3}.Debug|x64.ActiveCfg = Debug|x64
+		{B5C6E948-ED35-45E3-8B3F-F901A588EAE3}.Debug|x64.Build.0 = Debug|x64
+		{B5C6E948-ED35-45E3-8B3F-F901A588EAE3}.Release|x64.ActiveCfg = Release|x64
+		{B5C6E948-ED35-45E3-8B3F-F901A588EAE3}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0154A846-BD8D-45A8-AEA2-7C281457D5C3}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,197 @@
+{
+    "taxonomy": "Bearings/Ball bearings/Deep groove ball bearings",
+    "designation": "6205",
+    "short_description": "Deep groove ball bearing",
+    "description": "Single row deep groove ball bearings are particularly versatile, have low friction and are optimized for low noise and low vibration, which enables high rotational speeds. They accommodate radial and axial loads in both directions, are easy to mount, and require less maintenance than many other bearing types.",
+    "category": "Deep groove ball bearings",
+    "title": "6205",
+    "benefits": "Simple, versatile and robust design\nLow friction\nHigh-speed capability\nAccommodate radial and axial loads in both directions\nRequire little maintenance",
+    "system": "metric",
+    "language": "en",
+    "source": "pim",
+    "dimensions": [
+        {
+            "name": "Outside diameter",
+            "value": 52,
+            "unit": "mm",
+            "symbol": "D"
+        },
+        {
+            "name": "Bore diameter",
+            "value": 25,
+            "unit": "mm",
+            "symbol": "d"
+        },
+        {
+            "name": "Width",
+            "value": 15,
+            "unit": "mm",
+            "symbol": "B"
+        }
+    ],
+    "properties": [
+        {
+            "name": "Tolerance class",
+            "value": "Class P6 (P6)"
+        },
+        {
+            "name": "Material, bearing",
+            "value": "Bearing steel"
+        },
+        {
+            "name": "Relubrication feature",
+            "value": "Without"
+        },
+        {
+            "name": "Coating",
+            "value": "Without"
+        },
+        {
+            "name": "Lubricant",
+            "value": "None"
+        },
+        {
+            "name": "Bore type",
+            "value": "Cylindrical"
+        },
+        {
+            "name": "Cage",
+            "value": "Sheet metal"
+        },
+        {
+            "name": "Radial internal clearance",
+            "value": "CN"
+        },
+        {
+            "name": "Number of rows",
+            "value": "1"
+        },
+        {
+            "name": "Sealing",
+            "value": "Without"
+        },
+        {
+            "name": "Matched arrangement",
+            "value": "No"
+        },
+        {
+            "name": "Locating feature, bearing outer ring",
+            "value": "None"
+        },
+        {
+            "name": "Filling slots",
+            "value": "Without"
+        }
+    ],
+    "performance": [
+        {
+            "name": "Limiting speed",
+            "value": 18000,
+            "unit": "r/min",
+            "symbol": "nlim"
+        },
+        {
+            "name": "Basic static load rating",
+            "value": 7.8,
+            "unit": "kN",
+            "symbol": "C0"
+        },
+        {
+            "name": "Reference speed",
+            "value": 28000,
+            "unit": "r/min"
+        },
+        {
+            "name": "SKF performance class",
+            "value": "SKF Explorer"
+        },
+        {
+            "name": "Basic dynamic load rating",
+            "value": 14.8,
+            "unit": "kN",
+            "symbol": "C"
+        }
+    ],
+    "logistics": [
+        {
+            "name": "EAN code",
+            "value": "07316577067784"
+        },
+        {
+            "name": "Products per pallet",
+            "value": "1320"
+        },
+        {
+            "name": "Pack code",
+            "value": "12"
+        },
+        {
+            "name": "Pack gross weight",
+            "value": 0.129,
+            "unit": "kg"
+        },
+        {
+            "name": "Pack height",
+            "value": 67,
+            "unit": "mm"
+        },
+        {
+            "name": "Pack length",
+            "value": 65,
+            "unit": "mm"
+        },
+        {
+            "name": "Pack volume",
+            "value": 0.0958,
+            "unit": "dm³"
+        },
+        {
+            "name": "Pack width",
+            "value": 22,
+            "unit": "mm"
+        },
+        {
+            "name": "Products per pack",
+            "value": "1"
+        },
+        {
+            "name": "Collecting pack quantity",
+            "value": "5"
+        },
+        {
+            "name": "eClass code",
+            "value": "23-05-08-01"
+        },
+        {
+            "name": "Product net weight",
+            "value": 0.125,
+            "unit": "kg"
+        },
+        {
+            "name": "UNSPSC code",
+            "value": "31171504"
+        }
+    ],
+    "specifications": [
+        {
+            "name": "photo_url",
+            "value": "https://cdn.skfmediahub.skf.com/api/public/0901d196807ff28b/png_highpreview/0901d196807ff28b_png_highpreview.png"
+        },
+        {
+            "name": "z12",
+            "value": "BC"
+        },
+        {
+            "name": "z11",
+            "value": "BB1"
+        },
+        {
+            "name": "z14",
+            "value": "C"
+        },
+        {
+            "name": "z66",
+            "value": "51207"
+        }
+    ]
+}
