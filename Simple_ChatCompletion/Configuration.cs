@@ -2,7 +2,7 @@
 public static class Configuration
 {
     public const string EndPoint = "https://skf-openai-dev-eval.openai.azure.com/";
-    public const string Key = "Ega0KDTFLpgBxgJJ3FGQNHX2bk3GDsYuRWvl1c4rzZoj4PMHD7vtJQQJ99ALACYeBjFXJ3w3AAABACOGisf1";
+    public const string Key = "-Ega0KDTFLpgBxgJJ3FGQNHX2bk3GDsYuRWvl1c4rzZoj4PMHD7vtJQQJ99ALACYeBjFXJ3w3AAABACOGisf1";
     public const string Model = "gpt-4o-mini";
     public const string Version = "2024-08-01-preview";
 
