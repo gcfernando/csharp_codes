@@ -14,14 +14,14 @@ public class FileDownloader : IDisposable
         _semaphore = new SemaphoreSlim(maxConcurrentDownloads, maxConcurrentDownloads);
     }
 
-    public async Task StartDownloadAsync()
+    public Task StartDownloadAsync()
     {
         var tasks = new List<Task>();
         while (tasks.Count < _semaphore.CurrentCount && _fileQueue.TryDequeue(out var file))
         {
             tasks.Add(DownloadFileAsync(file));
         }
-        await Task.WhenAll(tasks);
+        return Task.WhenAll(tasks);
     }
 
     private async Task DownloadFileAsync(string file)
@@ -88,7 +88,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"An unexpected error occurred: {ex.Message}");
+            await Console.Error.WriteLineAsync($"An unexpected error occurred: {ex.Message}");
         }
     }
 }
