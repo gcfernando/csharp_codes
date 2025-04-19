@@ -46,3 +46,6 @@
 /Mediat/Mediat.Model/bin/x64
 /Mediat/Mediat.Model/obj
 /Mediat/.vs/ProjectEvaluation
+/SemaphoreSlim/.vs
+/SemaphoreSlim/bin/Debug/net8.0
+/SemaphoreSlim/obj
