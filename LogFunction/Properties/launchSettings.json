@@ -1,9 +1,9 @@
 {
-  "profiles": {
-    "LogFunction": {
-      "commandName": "Project",
-      "commandLineArgs": "--port 7248",
-      "launchBrowser": false
+    "profiles": {
+        "LogFunction": {
+            "commandName": "Project",
+            "commandLineArgs": "--port 7248",
+            "launchBrowser": false
+        }
     }
-  }
 }
