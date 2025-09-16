@@ -174,12 +174,13 @@ public static class ExLogger
     {
         ArgumentNullException.ThrowIfNull(logger);
 
-        if (context == null || context.Count == 0)
+        if (context is null || context.Count == 0)
         {
             return null;
         }
 
         var safeContext = new Dictionary<string, object>();
+
         foreach (var kvp in context)
         {
             safeContext[kvp.Key] = kvp.Value ?? "N/A";
