@@ -1,0 +1,27 @@
+{
+    "version": "2.0",
+    "concurrency": {
+        "dynamicConcurrencyEnabled": true,
+        "snapshotPersistenceEnabled": true
+    },
+    "logging": {
+        "Console": {
+            "IncludeScopes": true
+        },
+        "fileLoggingMode": "always",
+        "logLevel": {
+            "default": "Information",
+            "Host.Results": "Information",
+            "Function": "Information",
+            "Host.Aggregator": "Trace"
+        },
+        "applicationInsights": {
+            "enablePerformanceCountersCollection": true,
+            "samplingSettings": {
+                "excludedTypes": "Request,Trace,Exception",
+                "isEnabled": true,
+                "maxTelemetryItemsPerSecond": 5
+            }
+        }
+    }
+}
