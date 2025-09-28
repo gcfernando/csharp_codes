@@ -53,3 +53,9 @@
 /PythonBridge/obj/Debug/net8.0
 /PythonBridge/bin/Debug/net8.0
 /PythonBridge/obj
+/LogFunction/LogFunction.Benchmark/bin
+/LogFunction/LogFunction.Benchmark/obj
+/LogFunction/.vs/LogFunction
+/LogFunction/LogFunction.Logger/bin
+/LogFunction/LogFunction.Logger/obj
+/LogFunction/Logger/obj
