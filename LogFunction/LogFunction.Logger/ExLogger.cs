@@ -177,8 +177,9 @@ public static class ExLogger
     /// <summary>
     /// <para>Logs a detailed exception report (timestamp, type, message, inner exception, stack trace, source).</para>
     /// <para>Note: does not pass the exception object directly to avoid duplicate stack traces in logs.</para>
+    /// <param>An optional title to prepend to the log entry (default: "Internal System Error").</param>
     /// </summary>
-    public static void LogException(ILogger logger, Exception ex)
+    public static void LogException(ILogger logger, Exception ex, string title = "Internal System Error")
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(ex);
@@ -188,7 +189,6 @@ public static class ExLogger
             return;
         }
 
-        const string title = "Internal System Error";
         var msg = FormatExceptionMessage(ex, title);
 
         _error(logger, msg, null);
