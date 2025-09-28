@@ -11,6 +11,4 @@ builder.Services
     .AddApplicationInsightsTelemetryWorkerService()
     .ConfigureFunctionsApplicationInsights();
 
-await builder
-    .Build()
-    .RunAsync();
+builder.Build().Run();
