@@ -68,7 +68,6 @@ public static class ExLogger
 
     // Cached EventIds reduce allocations when structured logging is used.
     private static readonly EventId _traceId = new((int)LogLevel.Trace, "TraceEvent");
-
     private static readonly EventId _debugId = new((int)LogLevel.Debug, "DebugEvent");
     private static readonly EventId _infoId = new((int)LogLevel.Information, "InformationEvent");
     private static readonly EventId _warnId = new((int)LogLevel.Warning, "WarningEvent");
