@@ -216,24 +216,6 @@ public static class ExLogger
     #region Log Scope Helper
 
     /// <summary>
-    /// Represents a single key-value scope for logging.
-    /// </summary>
-    private readonly struct SingleScope : IEnumerable<KeyValuePair<string, object>>
-    {
-        private readonly KeyValuePair<string, object> _pair;
-
-        public SingleScope(string key, object value) =>
-            _pair = new KeyValuePair<string, object>(key, value ?? "N/A");
-
-        public IEnumerator<KeyValuePair<string, object>> GetEnumerator()
-        {
-            yield return _pair;
-        }
-
-        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-    }
-
-    /// <summary>
     /// Begins a logging scope with a single key-value pair.
     /// </summary>
     public static IDisposable BeginScope(ILogger logger, string key, object value)
@@ -256,13 +238,55 @@ public static class ExLogger
         }
 
         // Ensure no null values exist in scope
-        var safe = new Dictionary<string, object>(context.Count);
+        var safe = new List<KeyValuePair<string, object>>(context.Count);
         foreach (var kv in context)
         {
-            safe[kv.Key] = kv.Value ?? "N/A";
+            safe.Add(new KeyValuePair<string, object>(kv.Key, kv.Value ?? "N/A"));
         }
 
-        return logger.BeginScope(safe) ?? NullScope.Instance;
+        return logger.BeginScope(new ScopeWrapper(safe)) ?? NullScope.Instance;
+    }
+
+    /// <summary>
+    /// Represents a single key-value scope for logging.
+    /// </summary>
+    private readonly struct SingleScope : IEnumerable<KeyValuePair<string, object>>
+    {
+        private readonly KeyValuePair<string, object> _pair;
+
+        public SingleScope(string key, object value) =>
+            _pair = new KeyValuePair<string, object>(key, value ?? "N/A");
+
+        public IEnumerator<KeyValuePair<string, object>> GetEnumerator()
+        {
+            yield return _pair;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public override string ToString() => $"{_pair.Key}={_pair.Value}";
+    }
+
+    /// <summary>
+    /// A wrapper that allows multiple key-value pairs to be logged in scopes,
+    /// ensuring they expand properly in console and Application Insights.
+    /// </summary>
+    private sealed class ScopeWrapper : IReadOnlyList<KeyValuePair<string, object>>
+    {
+        private readonly List<KeyValuePair<string, object>> _items;
+
+        public ScopeWrapper(List<KeyValuePair<string, object>> items) => _items = items;
+
+        public int Count => _items.Count;
+
+        public KeyValuePair<string, object> this[int index] => _items[index];
+
+        public IEnumerator<KeyValuePair<string, object>> GetEnumerator() => _items.GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => _items.GetEnumerator();
+
+        public override string ToString() =>
+            string.Join(" ", _items.Select(kv => $"{kv.Key}={kv.Value}"));
     }
 
     #endregion Log Scope Helper
