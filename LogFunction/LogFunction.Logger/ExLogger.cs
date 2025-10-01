@@ -178,7 +178,7 @@ public static class ExLogger
     }
 
     /// <summary>
-    /// Builds a detailed exception log message using a pooled <see cref="StringBuilder"/>.
+    /// Builds a detailed exception log message in a consistent block format.
     /// </summary>
     private static string FormatExceptionMessage(Exception ex, string title, bool moreDetailsEnabled)
     {
@@ -187,27 +187,27 @@ public static class ExLogger
         {
             sb.Clear();
 
-            // Append structured details
-            sb.Append("Timestamp      : ").AppendLine(DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff"))
-              .Append("Title          : ").AppendLine(title)
-              .Append("Exception Type : ").AppendLine(ex.GetType().FullName)
-              .Append("Exception      : ").AppendLine(ex.Message?.Trim() ?? "N/A")
-              .AppendLine();
+            sb.AppendLine($"Timestamp      : {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}")
+              .AppendLine($"Title          : {title}")
+              .AppendLine($"Exception Type : {ex.GetType().FullName}")
+              .AppendLine($"Exception      : {ex.Message?.Trim() ?? "N/A"}");
 
             if (moreDetailsEnabled)
             {
-                sb.Append("Inner Exception: ").AppendLine(ex.InnerException?.Message?.Trim() ?? "N/A")
-                  .Append("Stack Trace    : ").AppendLine(ex.StackTrace?.Trim() ?? "N/A")
-                  .AppendLine();
+                sb.AppendLine()
+                  .AppendLine($"Inner Exception: {ex.InnerException?.Message?.Trim() ?? "N/A"}")
+                  .AppendLine("Stack Trace    :")
+                  .AppendLine(ex.StackTrace?.Trim() ?? "N/A");
             }
 
-            sb.Append("Source         : ").AppendLine(ex.Source ?? "N/A");
+            sb.AppendLine()
+              .AppendLine($"Source         : {ex.Source ?? "N/A"}");
 
             return sb.ToString();
         }
         finally
         {
-            _sbPool.Return(sb); // Return builder to pool
+            _sbPool.Return(sb);
         }
     }
 
