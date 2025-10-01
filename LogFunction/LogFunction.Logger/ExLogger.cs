@@ -11,25 +11,15 @@ using System.Collections;
 namespace LogFunction.Logger;
 
 /// <summary>
-/// A high-performance, centralized logging utility that provides:
-/// - Strongly typed and consistent logging methods across all <see cref="LogLevel"/> values.
-/// - Predefined delegates for zero-allocation logging when no formatting arguments are provided.
-/// - Cached <see cref="EventId"/> instances for structured logging.
-/// - Exception logging with pooled <see cref="StringBuilder"/> to minimize GC pressure.
-/// - Scope helpers to attach contextual information (e.g., RequestId, UserId).
-///
-/// <para>
-/// This utility is designed to maximize logging performance and consistency across an application,
-/// while minimizing memory allocations and providing convenient APIs for structured and contextual logging.
-/// </para>
+/// Provides extension-based logging utilities with optimized delegates,
+/// structured exception logging, and scoped context support.
 /// </summary>
 public static class ExLogger
 {
     #region Predefined Delegates for Performance
 
-    // These delegates are compiled at startup and reused.
-    // They eliminate allocations that would normally occur
-    // when calling ILogger.Log with message templates.
+    // Predefined logging delegates for each log level.
+    // These are cached for performance to reduce runtime allocations.
     private static readonly Action<ILogger, string, Exception> _trace =
         LoggerMessage.Define<string>(LogLevel.Trace, new EventId(0, "TraceEvent"), "{Message}");
 
@@ -48,10 +38,7 @@ public static class ExLogger
     private static readonly Action<ILogger, string, Exception> _critical =
         LoggerMessage.Define<string>(LogLevel.Critical, new EventId(5, "CriticalEvent"), "{Message}");
 
-    /// <summary>
-    /// Lookup table mapping <see cref="LogLevel"/> → predefined delegate.
-    /// Used for the fast path (no message formatting arguments).
-    /// </summary>
+    // Dictionary mapping log levels to their respective delegates.
     private static readonly Dictionary<LogLevel, Action<ILogger, string, Exception>> _delegates = new()
     {
         [LogLevel.Trace] = _trace,
@@ -66,7 +53,7 @@ public static class ExLogger
 
     #region Cached EventIds
 
-    // Cached EventIds reduce allocations when structured logging is used.
+    // Cached EventIds for each log level to avoid repeated allocations.
     private static readonly EventId _traceId = new((int)LogLevel.Trace, "TraceEvent");
     private static readonly EventId _debugId = new((int)LogLevel.Debug, "DebugEvent");
     private static readonly EventId _infoId = new((int)LogLevel.Information, "InformationEvent");
@@ -75,7 +62,7 @@ public static class ExLogger
     private static readonly EventId _criticalId = new((int)LogLevel.Critical, "CriticalEvent");
 
     /// <summary>
-    /// Retrieves a cached <see cref="EventId"/> for the specified log level.
+    /// Returns a cached <see cref="EventId"/> for the given <see cref="LogLevel"/>.
     /// </summary>
     private static EventId GetEventId(LogLevel level) => level switch
     {
@@ -93,46 +80,41 @@ public static class ExLogger
     #region Generic Log Method
 
     /// <summary>
-    /// <para>Core log method used by all convenience wrappers.</para>
-    /// <para>
-    /// Uses a two-path strategy:
-    /// - Fast path: when no <paramref name="args"/> are supplied,
-    ///   uses precompiled delegates (zero allocation).
-    /// - Fallback: when arguments are present, logs with cached <see cref="EventId"/>.
-    /// </para>
+    /// Logs a message with the specified log level, message, exception, and arguments.
+    /// Uses cached delegates where possible for performance optimization.
     /// </summary>
     public static void Log(ILogger logger, LogLevel level, string message, Exception exception, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
-        message ??= "N/A";
+        message ??= "N/A"; // Default to "N/A" if message is null
 
         if (!logger.IsEnabled(level))
         {
-            return;
+            return; // Skip if logging is disabled for this level
         }
 
         if (_delegates.TryGetValue(level, out var del))
         {
             if (args == null)
             {
-                // Fast path: no args provided, zero-allocation delegate
+                // No arguments provided, log directly using delegate
                 del(logger, message, exception);
                 return;
             }
             else if (args.Length == 0)
             {
-                // Args provided but empty → pass Array.Empty<object>() to avoid null checks internally
+                // Empty argument list, log with empty object array
                 logger.Log(level, GetEventId(level), exception, message, Array.Empty<object>());
                 return;
             }
         }
 
-        // Regular structured logging with actual args
+        // Fallback: log with provided args (if not null)
         logger.Log(level, GetEventId(level), exception, message, args ?? Array.Empty<object>());
     }
 
     /// <summary>
-    /// Overload for logging without an <see cref="Exception"/>.
+    /// Overload: Logs a message with no exception.
     /// </summary>
     public static void Log(ILogger logger, LogLevel level, string message, params object[] args) =>
         Log(logger, level, message, null, args);
@@ -141,27 +123,31 @@ public static class ExLogger
 
     #region Convenience Methods
 
-    // These are syntactic sugar around the generic log method,
-    // providing strongly-typed entry points for each log level.
-
+    /// <summary> Logs a trace message. </summary>
     public static void LogTrace(ILogger logger, string message, params object[] args) =>
         Log(logger, LogLevel.Trace, message, args);
 
+    /// <summary> Logs a debug message. </summary>
     public static void LogDebug(ILogger logger, string message, params object[] args) =>
         Log(logger, LogLevel.Debug, message, args);
 
+    /// <summary> Logs an information message. </summary>
     public static void LogInformation(ILogger logger, string message, params object[] args) =>
         Log(logger, LogLevel.Information, message, args);
 
+    /// <summary> Logs a warning message. </summary>
     public static void LogWarning(ILogger logger, string message, params object[] args) =>
         Log(logger, LogLevel.Warning, message, args);
 
+    /// <summary> Logs an error message with exception. </summary>
     public static void LogError(ILogger logger, string message, Exception exception, params object[] args) =>
         Log(logger, LogLevel.Error, message, exception, args);
 
+    /// <summary> Logs an error message without exception. </summary>
     public static void LogError(ILogger logger, string message, params object[] args) =>
         Log(logger, LogLevel.Error, message, null, args);
 
+    /// <summary> Logs a critical message with exception. </summary>
     public static void LogCritical(ILogger logger, string message, Exception exception, params object[] args) =>
         Log(logger, LogLevel.Critical, message, exception, args);
 
@@ -169,56 +155,59 @@ public static class ExLogger
 
     #region Exception Logging
 
-    // Pooling StringBuilder to avoid repeated allocations
-    // when formatting exception details.
+    // Object pool to reuse StringBuilder instances for exception formatting.
     private static readonly ObjectPool<StringBuilder> _sbPool =
         new DefaultObjectPoolProvider().CreateStringBuilderPool();
 
     /// <summary>
-    /// <para>Logs a detailed exception report (timestamp, type, message, inner exception, stack trace, source).</para>
-    /// <para>Note: does not pass the exception object directly to avoid duplicate stack traces in logs.</para>
-    /// <param>An optional title to prepend to the log entry (default: "Internal System Error").</param>
+    /// Logs an exception with detailed structured information (timestamp, type, stack trace).
     /// </summary>
-    public static void LogException(ILogger logger, Exception ex, string title = "Internal System Error")
+    public static void LogException(ILogger logger, Exception ex, string title = "Internal System Error", bool moreDetailsEnabled = true)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(ex);
 
         if (!logger.IsEnabled(LogLevel.Error))
         {
-            return;
+            return; // Skip if error logging is disabled
         }
 
-        var msg = FormatExceptionMessage(ex, title);
+        var msg = FormatExceptionMessage(ex, title, moreDetailsEnabled);
 
         _error(logger, msg, null);
     }
 
     /// <summary>
-    /// Formats an exception into a structured, human-readable string.
-    /// Uses <see cref="StringBuilder"/> pooling to reduce GC pressure.
+    /// Builds a detailed exception log message using a pooled <see cref="StringBuilder"/>.
     /// </summary>
-    private static string FormatExceptionMessage(Exception ex, string title)
+    private static string FormatExceptionMessage(Exception ex, string title, bool moreDetailsEnabled)
     {
         var sb = _sbPool.Get();
         try
         {
-            _ = sb.Clear();
-            _ = sb.Append("Timestamp      : ").AppendLine(DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff"))
-                  .Append("Title          : ").AppendLine(title)
-                  .Append("Exception Type : ").AppendLine(ex.GetType().FullName)
-                  .Append("Exception      : ").AppendLine(ex.Message?.Trim() ?? "N/A")
-                  .AppendLine()
-                  .Append("Inner Exception: ").AppendLine(ex.InnerException?.Message?.Trim() ?? "N/A")
+            sb.Clear();
+
+            // Append structured details
+            sb.Append("Timestamp      : ").AppendLine(DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff"))
+              .Append("Title          : ").AppendLine(title)
+              .Append("Exception Type : ").AppendLine(ex.GetType().FullName)
+              .Append("Exception      : ").AppendLine(ex.Message?.Trim() ?? "N/A")
+              .AppendLine();
+
+            if (moreDetailsEnabled)
+            {
+                sb.Append("Inner Exception: ").AppendLine(ex.InnerException?.Message?.Trim() ?? "N/A")
                   .Append("Stack Trace    : ").AppendLine(ex.StackTrace?.Trim() ?? "N/A")
-                  .AppendLine()
-                  .Append("Source         : ").AppendLine(ex.Source ?? "N/A");
+                  .AppendLine();
+            }
+
+            sb.Append("Source         : ").AppendLine(ex.Source ?? "N/A");
 
             return sb.ToString();
         }
         finally
         {
-            _sbPool.Return(sb);
+            _sbPool.Return(sb); // Return builder to pool
         }
     }
 
@@ -227,8 +216,7 @@ public static class ExLogger
     #region Log Scope Helper
 
     /// <summary>
-    /// Represents a single key/value scope, implemented as a struct
-    /// to avoid dictionary allocations for simple scenarios.
+    /// Represents a single key-value scope for logging.
     /// </summary>
     private readonly struct SingleScope : IEnumerable<KeyValuePair<string, object>>
     {
@@ -247,7 +235,6 @@ public static class ExLogger
 
     /// <summary>
     /// Begins a logging scope with a single key-value pair.
-    /// Ensures context (e.g., RequestId) is automatically attached to all logs inside the scope.
     /// </summary>
     public static IDisposable BeginScope(ILogger logger, string key, object value)
     {
@@ -259,7 +246,6 @@ public static class ExLogger
 
     /// <summary>
     /// Begins a logging scope with multiple key-value pairs.
-    /// Null-safe: if dictionary is null or empty, returns a no-op scope.
     /// </summary>
     public static IDisposable BeginScope(ILogger logger, IDictionary<string, object> context)
     {
@@ -269,7 +255,7 @@ public static class ExLogger
             return NullScope.Instance;
         }
 
-        // Ensure values are not null (replace with "N/A")
+        // Ensure no null values exist in scope
         var safe = new Dictionary<string, object>(context.Count);
         foreach (var kv in context)
         {
@@ -283,12 +269,7 @@ public static class ExLogger
 }
 
 /// <summary>
-/// A disposable no-op logging scope used when no real scope is required.
-/// Prevents null checks on scope operations.
-/// <para>
-/// This class is used internally by <see cref="ExLogger"/> to provide a default, no-operation
-/// implementation of <see cref="IDisposable"/> for logging scopes when no actual scope is needed.
-/// </para>
+/// Represents a no-op logging scope (when no scope is active).
 /// </summary>
 internal sealed class NullScope : IDisposable
 {
