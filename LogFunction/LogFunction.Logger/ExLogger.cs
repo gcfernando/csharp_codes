@@ -58,12 +58,13 @@ public static class ExLogger
         [LogLevel.Critical] = _critical
     };
 
-    #endregion
+    #endregion Predefined Delegates for Performance
 
     #region Cached EventIds
 
     // 🔒 Cached EventIds for each log level to avoid allocating new instances at runtime
     private static readonly EventId _traceId = new((int)LogLevel.Trace, "TraceEvent");
+
     private static readonly EventId _debugId = new((int)LogLevel.Debug, "DebugEvent");
     private static readonly EventId _infoId = new((int)LogLevel.Information, "InformationEvent");
     private static readonly EventId _warnId = new((int)LogLevel.Warning, "WarningEvent");
@@ -84,7 +85,7 @@ public static class ExLogger
         _ => new EventId(0, "UnknownEvent")
     };
 
-    #endregion
+    #endregion Cached EventIds
 
     #region Generic Log Methods
 
@@ -138,7 +139,7 @@ public static class ExLogger
         logger.Log(level, GetEventId(level), exception, messageTemplate, args ?? Array.Empty<object>());
     }
 
-    #endregion
+    #endregion Generic Log Methods
 
     #region Convenience Methods
 
@@ -193,7 +194,7 @@ public static class ExLogger
     public static void LogCritical(ILogger logger, string message, Exception exception, params object[] args) =>
         Log(logger, LogLevel.Critical, message, exception, args);
 
-    #endregion
+    #endregion Convenience Methods
 
     #region Exception Logging
 
@@ -330,7 +331,7 @@ public static class ExLogger
         }
     }
 
-    #endregion
+    #endregion Exception Logging
 
     #region Log Scope Helper
 
@@ -414,6 +415,7 @@ public static class ExLogger
         public KeyValuePair<string, object> this[int index] => _items[index];
 
         public IEnumerator<KeyValuePair<string, object>> GetEnumerator() => _items.GetEnumerator();
+
         IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
 
         public override string ToString() =>
@@ -442,7 +444,7 @@ public static class ExLogger
             string.Join(" ", _items.Select(kv => $"{kv.Key}={kv.Value}"));
     }
 
-    #endregion
+    #endregion Log Scope Helper
 }
 
 /// <summary>
@@ -452,6 +454,10 @@ public static class ExLogger
 internal sealed class NullScope : IDisposable
 {
     public static readonly NullScope Instance = new();
-    private NullScope() { }
-    public void Dispose() { }
+
+    private NullScope()
+    { }
+
+    public void Dispose()
+    { }
 }

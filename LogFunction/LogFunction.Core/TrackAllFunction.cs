@@ -16,8 +16,8 @@ namespace LogFunction.Core;
 ///   <item>Generic Log overloads (with/without exception)</item>
 ///   <item>Exception logging (default + structured + critical)</item>
 ///   <item>Scoped logging (single & multi key scopes)</item>
-///   <item>Async logging demo</item>
-///   <item>Throughput mini-stress loop</item>
+///   <item>Async flush demo</item>
+///   <item>Throughput stress loop</item>
 ///   <item>Comparison: ExLogger vs BatchLogger</item>
 /// </list>
 /// </para>
@@ -42,15 +42,13 @@ public class TrackAllFunction(ILogger<TrackAllFunction> logger)
         // ====================================================================
         // SECTION B: BatchLogger Demo
         // ====================================================================
-
-        // Create BatchLogger (scoped to this request, disposed automatically by using)
         using var batchLogger = new BatchLogger(
             logger,
             capacity: 5000,                  // max buffered messages
             batchSize: 100,                  // flush when 100 reached
             flushInterval: TimeSpan.FromMilliseconds(200)); // or flush on interval
 
-        DemoBatchingLogger(batchLogger);
+        DemoBatchLogger(batchLogger);
 
         // ====================================================================
         // SECTION C: Mini stress test (BatchLogger throughput)
@@ -61,7 +59,7 @@ public class TrackAllFunction(ILogger<TrackAllFunction> logger)
             batchLogger.LogInformation("High-throughput batching log {Index} at {UtcNow}", null, i, DateTime.UtcNow);
         }
 
-        // Explicit flush ensures logs are written before response (important in Functions!)
+        // Explicit flush ensures logs are written before HTTP response (important in Functions!)
         await batchLogger.FlushAsync();
 
         // ====================================================================
@@ -131,7 +129,7 @@ public class TrackAllFunction(ILogger<TrackAllFunction> logger)
     // ============================================================
     // BatchLogger demo
     // ============================================================
-    private static void DemoBatchingLogger(BatchLogger batchingLogger)
+    private static void DemoBatchLogger(BatchLogger batchingLogger)
     {
         // ---- Basic logs ----
         batchingLogger.LogTrace("BatchLogger Trace");
@@ -154,6 +152,25 @@ public class TrackAllFunction(ILogger<TrackAllFunction> logger)
         {
             batchingLogger.LogError("BatchLogger error with exception {Code}", ex, "ERR123");
             batchingLogger.LogCritical("BatchLogger critical failure {OpId}", ex, Guid.NewGuid());
+            batchingLogger.LogErrorException(ex, "Error (formatter demo)");
+            batchingLogger.LogCriticalException(ex, "Critical (formatter demo)");
+        }
+
+        // ---- Scoped logging ----
+        using (batchingLogger.BeginScope("BatchRequestId", Guid.NewGuid()))
+        {
+            batchingLogger.LogInformation("Inside single-key BatchLogger scope");
+        }
+
+        var ctx = new Dictionary<string, object>
+        {
+            ["BatchUserId"] = 202,
+            ["BatchTxnId"] = Guid.NewGuid()
+        };
+
+        using (batchingLogger.BeginScope(ctx))
+        {
+            batchingLogger.LogWarning("Inside multi-key BatchLogger scope");
         }
     }
 }

@@ -30,11 +30,17 @@ public class ExLoggerAllMethodsBenchmarks
 
     // ---- Convenience ----
     [Benchmark] public void LogTrace() => ExLogger.LogTrace(_logger, "Trace message");
+
     [Benchmark] public void LogDebug() => ExLogger.LogDebug(_logger, "Debug {X}", 42);
+
     [Benchmark] public void LogInformation() => ExLogger.LogInformation(_logger, "Info {EventId}", 77);
+
     [Benchmark] public void LogWarning() => ExLogger.LogWarning(_logger, "Warn {Code}", "W123");
+
     [Benchmark] public void LogError_WithException() => ExLogger.LogError(_logger, "Error {User}", _ex, "user1");
+
     [Benchmark] public void LogError_NoException() => ExLogger.LogError(_logger, "Error no exception");
+
     [Benchmark] public void LogCritical_WithException() => ExLogger.LogCritical(_logger, "Critical failure", _ex);
 
     // ---- Exception Helpers ----
