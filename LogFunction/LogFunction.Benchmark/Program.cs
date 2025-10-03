@@ -1,4 +1,4 @@
 ﻿using BenchmarkDotNet.Running;
 using LogFunction.Benchmark;
 
-_ = BenchmarkRunner.Run<ExLoggerBenchmarks>();
+BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);

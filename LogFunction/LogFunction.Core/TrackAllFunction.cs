@@ -1,5 +1,4 @@
-using System.Text.Json;
-using LogFunction.Logger;
+﻿using LogFunction.Logger;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -8,201 +7,153 @@ using Microsoft.Extensions.Logging;
 namespace LogFunction.Core;
 
 /// <summary>
-/// Azure Function that exercises the full ExLogger surface:
-/// - Fast-path delegates (no-arg logs)
-/// - Structured logging with {Placeholders}
-/// - Generic Log overloads (with/without exception)
-/// - Exception logging at Error/Critical with global or per-call formatter
-/// - Scoped logging (single & multi key)
-/// - Async scope example
-/// - AggregateException to demonstrate recursive inner-exception formatting
+/// Azure Function demonstrating **all possible usages** of <see cref="ExLogger"/> and <see cref="BatchLogger"/>.
+/// <para>
+/// Covers:
+/// <list type="bullet">
+///   <item>Fast-path delegates (no-arg logs)</item>
+///   <item>Structured logging with {Placeholders}</item>
+///   <item>Generic Log overloads (with/without exception)</item>
+///   <item>Exception logging (default + structured + critical)</item>
+///   <item>Scoped logging (single & multi key scopes)</item>
+///   <item>Async logging demo</item>
+///   <item>Throughput mini-stress loop</item>
+///   <item>Comparison: ExLogger vs BatchLogger</item>
+/// </list>
+/// </para>
+/// <para>
+/// ⚠️ NOTE:
+/// * In this demo we use "using var" for <see cref="BatchLogger"/> to ensure cleanup per request.
+/// * In production you would typically register <see cref="BatchLogger"/> as a Singleton via DI.
+/// </para>
 /// </summary>
-public class ExLoggerTestFunction(ILogger<ExLoggerTestFunction> logger)
+public class TrackAllFunction(ILogger<TrackAllFunction> logger)
 {
-    [Function("exlogger-test")]
+    [Function("logger-test")]
     public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post")] HttpRequest req)
     {
         ArgumentNullException.ThrowIfNull(req);
 
-        // ----------------------------------------------------------------
-        // 0) (Optional) Demonstrate GLOBAL custom formatter for exceptions
-        //     NOTE: We restore the original formatter after we use it.
-        // ----------------------------------------------------------------
-        var originalFormatter = ExLogger.ExceptionFormatter;
-        ExLogger.ExceptionFormatter = (ex, title, details) =>
+        // ====================================================================
+        // SECTION A: ExLogger Demo
+        // ====================================================================
+        DemoExLogger(logger);
+
+        // ====================================================================
+        // SECTION B: BatchLogger Demo
+        // ====================================================================
+
+        // Create BatchLogger (scoped to this request, disposed automatically by using)
+        using var batchLogger = new BatchLogger(
+            logger,
+            capacity: 5000,                  // max buffered messages
+            batchSize: 100,                  // flush when 100 reached
+            flushInterval: TimeSpan.FromMilliseconds(200)); // or flush on interval
+
+        DemoBatchingLogger(batchLogger);
+
+        // ====================================================================
+        // SECTION C: Mini stress test (BatchLogger throughput)
+        // ====================================================================
+        for (var i = 0; i < 20; i++)
         {
-            var payload = new
-            {
-                title,
-                type = ex.GetType().FullName,
-                message = ex.Message,
-                hresult = ex.HResult,
-                source = ex.Source,
-                target = ex.TargetSite?.Name,
-                inner = ex.InnerException is not null,
-                includeDetails = details
-            };
+            // 🚀 Enqueue 20 logs quickly (non-blocking)
+            batchLogger.LogInformation("High-throughput batching log {Index} at {UtcNow}", null, i, DateTime.UtcNow);
+        }
 
-            return System.Text.Json.JsonSerializer.Serialize(payload);
-        };
+        // Explicit flush ensures logs are written before response (important in Functions!)
+        await batchLogger.FlushAsync();
 
-        // ----------------------------------------------------------------
-        // 1) Fast-path delegates (no args) -> minimal allocations
-        // ----------------------------------------------------------------
-        ExLogger.LogTrace(logger, "Trace log from ExLogger (fast path).");
-        ExLogger.LogDebug(logger, "Debug log from ExLogger (fast path).");
-        ExLogger.LogInformation(logger, "Information log from ExLogger (fast path).");
-        ExLogger.LogWarning(logger, "Warning log from ExLogger (fast path).");
-        ExLogger.LogError(logger, "Error log from ExLogger (fast path).");
-        ExLogger.LogCritical(logger, "Critical log from ExLogger (fast path).", exception: null);
+        // ====================================================================
+        // Final HTTP response
+        // ====================================================================
+        return new OkObjectResult(new
+        {
+            Message = "Logger demo executed. Check logs for ExLogger and BatchLogger usage.",
+            Timestamp = DateTime.UtcNow
+        });
+    }
 
-        // ----------------------------------------------------------------
-        // 2) Structured logging ({Placeholders}) -> structured/fallback path
-        // ----------------------------------------------------------------
-        ExLogger.LogInformation(logger, "Structured info at {UtcNow}", DateTime.UtcNow);
-        ExLogger.LogWarning(logger, "Numbered placeholder {0}", 42);
-        ExLogger.LogDebug(logger, "User {UserId} performed {Action} at {UtcNow}", 12345, "Login", DateTime.UtcNow);
+    // ============================================================
+    // ExLogger demo
+    // ============================================================
+    private static void DemoExLogger(ILogger logger)
+    {
+        // ---- Fast-path delegates (precompiled for performance) ----
+        ExLogger.LogTrace(logger, "ExLogger Trace");
+        ExLogger.LogDebug(logger, "ExLogger Debug");
+        ExLogger.LogInformation(logger, "ExLogger Info");
+        ExLogger.LogWarning(logger, "ExLogger Warning");
+        ExLogger.LogError(logger, "ExLogger Error");
+        ExLogger.LogCritical(logger, "ExLogger Critical", exception: null);
 
-        // Also show the generic overload with explicit exception + template
-        var demoEx = new InvalidOperationException("Demo for structured overload");
-        ExLogger.Log(logger, LogLevel.Warning, demoEx, "Structured overload used for {Area}", "DemoArea");
+        // ---- Structured logs ----
+        ExLogger.LogInformation(logger, "ExLogger structured info {UtcNow}", DateTime.UtcNow);
+        ExLogger.LogDebug(logger, "ExLogger User {UserId} performed {Action}", 42, "Login");
 
-        // ----------------------------------------------------------------
-        // 3) Generic Log method family
-        // ----------------------------------------------------------------
-        ExLogger.Log(logger, LogLevel.Trace, "Generic Trace message.");
-        ExLogger.Log(logger, LogLevel.Debug, "Generic Debug with {Id}", Guid.NewGuid());
-        ExLogger.Log(logger, LogLevel.Information, "Generic Info at {UtcNow}", DateTime.UtcNow);
-        ExLogger.Log(logger, LogLevel.Warning, "Generic Warning message.");
-        ExLogger.Log(logger, LogLevel.Error, "Generic Error with arg {Arg}", "arg-value");
-        ExLogger.Log(logger, LogLevel.Critical, "Generic Critical message!");
+        // ---- Generic overloads ----
+        ExLogger.Log(logger, LogLevel.Information, "Generic info message");
+        ExLogger.Log(logger, LogLevel.Warning, "Generic warning with {Id}", Guid.NewGuid());
 
-        // ----------------------------------------------------------------
-        // 4) Exception logging (GLOBAL JSON formatter currently active)
-        // ----------------------------------------------------------------
+        // ---- Exception logging ----
         try
         {
-            var x = 0;
-            _ = 10 / x;
+            throw new InvalidOperationException("ExLogger demo exception");
         }
         catch (Exception ex)
         {
-            // Will use the GLOBAL JSON formatter
-            ExLogger.LogErrorException(logger, ex, "Divide-by-zero detected");
-            // Structured message with attached exception (template path)
-            ExLogger.Log(logger, LogLevel.Error, ex, "Handled divide-by-zero at {UtcNow}", DateTime.UtcNow);
+            // Error & Critical exception logging
+            ExLogger.LogErrorException(logger, ex, "Error logged with default formatter");
+            ExLogger.LogCriticalException(logger, ex, "Critical error with default formatter");
+
+            // Structured template overload with exception
+            ExLogger.Log(logger, LogLevel.Error, ex, "Structured exception with {Timestamp}", DateTime.UtcNow);
         }
 
-        // ----------------------------------------------------------------
-        // 5) Switch back to DEFAULT formatter and show per-call formatter
-        // ----------------------------------------------------------------
-        ExLogger.ExceptionFormatter = originalFormatter;
-
-        try
-        {
-            // Force AggregateException to exercise recursive inner exceptions
-            try
-            {
-                await Task.WhenAll(
-                    Task.Run(() => throw new FormatException("Inner format broke")),
-                    Task.Run(() => throw new TimeoutException("Inner timeout"))
-                );
-            }
-            catch (Exception inner)
-            {
-                throw new AggregateException("Outer aggregate failure", inner);
-            }
-        }
-        catch (Exception ex)
-        {
-            // (a) Use DEFAULT formatter via LogCriticalException
-            ExLogger.LogCriticalException(logger, ex, "Aggregate processing failure (default formatting)");
-
-            // (b) PER-CALL custom formatter for this one log only
-            ExLogger.LogExceptionWithFormatter(
-                logger,
-                ex,
-                LogLevel.Error,
-                (e, title, includeDetails) =>
-                {
-                    var lines = new List<string>
-                    {
-                        $"[{DateTime.UtcNow:O}] {title}",
-                        $"Type: {e.GetType().FullName}",
-                        $"Message: {e.Message}"
-                    };
-                    if (includeDetails && !string.IsNullOrWhiteSpace(e.StackTrace))
-                    {
-                        lines.Add("StackTrace:");
-                        lines.Add(e.StackTrace);
-                    }
-                    return string.Join(Environment.NewLine, lines);
-                },
-                title: "Aggregate failure (per-call custom formatting)",
-                moreDetailsEnabled: true
-            );
-        }
-
-        // ----------------------------------------------------------------
-        // 6) Scopes (single & multi key)
-        // ----------------------------------------------------------------
+        // ---- Scoped logging (adds context to logs) ----
         using (ExLogger.BeginScope(logger, "RequestId", Guid.NewGuid()))
         {
-            ExLogger.LogInformation(logger, "Inside single-key scope at {UtcNow}", DateTime.UtcNow);
+            ExLogger.LogInformation(logger, "Inside single-key ExLogger scope");
         }
 
-        var multi = new Dictionary<string, object>
+        var ctx = new Dictionary<string, object>
         {
-            ["RequestId"] = Guid.NewGuid(),
-            ["UserId"] = 777,
+            ["UserId"] = 101,
             ["TransactionId"] = Guid.NewGuid()
         };
 
-        using (ExLogger.BeginScope(logger, multi))
+        using (ExLogger.BeginScope(logger, ctx))
         {
-            ExLogger.LogInformation(logger, "Inside multi-key scope");
-            ExLogger.LogError(logger, "Error within multi-key scope for {TransactionId}", multi["TransactionId"]);
+            ExLogger.LogWarning(logger, "Inside multi-key ExLogger scope");
         }
+    }
 
-        // ----------------------------------------------------------------
-        // 7) Mixed Example: NullReferenceException + both Error/Critical detailed logs
-        // ----------------------------------------------------------------
+    // ============================================================
+    // BatchLogger demo
+    // ============================================================
+    private static void DemoBatchingLogger(BatchLogger batchingLogger)
+    {
+        // ---- Basic logs ----
+        batchingLogger.LogTrace("BatchLogger Trace");
+        batchingLogger.LogDebug("BatchLogger Debug");
+        batchingLogger.LogInformation("BatchLogger Info");
+        batchingLogger.LogWarning("BatchLogger Warning");
+        batchingLogger.LogError("BatchLogger Error");
+        batchingLogger.LogCritical("BatchLogger Critical");
+
+        // ---- Structured logs ----
+        batchingLogger.LogInformation("Batch info {UtcNow}", null, DateTime.UtcNow);
+        batchingLogger.LogDebug("Batch user {UserId} did {Action}", null, 7, "Checkout");
+
+        // ---- Exception logging ----
         try
         {
-            string? s = null;
-            _ = s!.Length;
+            throw new ArgumentNullException(nameof(batchingLogger), "BatchLogger demo exception");
         }
         catch (Exception ex)
         {
-            using (ExLogger.BeginScope(logger, "Operation", "ScopedCriticalTest"))
-            {
-                ExLogger.LogErrorException(logger, ex, "Failure in scoped operation");
-                ExLogger.LogCriticalException(logger, ex, "Scoped critical error occurred");
-            }
+            batchingLogger.LogError("BatchLogger error with exception {Code}", ex, "ERR123");
+            batchingLogger.LogCritical("BatchLogger critical failure {OpId}", ex, Guid.NewGuid());
         }
-
-        // ----------------------------------------------------------------
-        // 8) Async scope + throughput mini-demo
-        // ----------------------------------------------------------------
-        using (ExLogger.BeginScope(logger, "AsyncRequestId", Guid.NewGuid()))
-        {
-            for (var i = 0; i < 5; i++)
-            {
-                ExLogger.LogDebug(logger, "High-throughput log {Index} at {UtcNow}", i, DateTime.UtcNow);
-                await Task.Delay(10);
-            }
-        }
-
-        // Final fast-path log to show delegates again
-        ExLogger.LogInformation(logger, "ExLogger test completed successfully.");
-
-        // ----------------------------------------------------------------
-        // 9) HTTP response
-        // ----------------------------------------------------------------
-        return new OkObjectResult(new
-        {
-            Message = "ExLogger test executed with latest features",
-            Timestamp = DateTime.UtcNow
-        });
     }
 }
