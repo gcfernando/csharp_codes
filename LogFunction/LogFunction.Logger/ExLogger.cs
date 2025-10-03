@@ -283,7 +283,7 @@ public static class ExLogger
 
         public IEnumerator<KeyValuePair<string, object>> GetEnumerator() => _items.GetEnumerator();
 
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => _items.GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
 
         public override string ToString() =>
             string.Join(" ", _items.Select(kv => $"{kv.Key}={kv.Value}"));
