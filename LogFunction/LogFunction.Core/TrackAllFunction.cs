@@ -6,98 +6,119 @@ using Microsoft.Extensions.Logging;
 
 namespace LogFunction.Core;
 
-public class TrackAllFunction(ILogger<TrackAllFunction> logger)
+/// <summary>
+/// Azure Function that demonstrates all ExLogger features.
+/// </summary>
+public class ExLoggerTestFunction(ILogger<ExLoggerTestFunction> logger)
 {
-    [Function("track-all-function")]
-    public IActionResult Run([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequest req)
+    [Function("exlogger-test")]
+    public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post")] HttpRequest req)
     {
         ArgumentNullException.ThrowIfNull(req);
 
         // ----------------------------------------------------------------
-        // 1. Basic Logging (No Arguments, Convenience Methods)
+        // 1. Basic Logs (convenience methods, no args)
         // ----------------------------------------------------------------
-        ExLogger.LogTrace(logger, "This is a trace log from ExLogger.");
-        ExLogger.LogDebug(logger, "This is a debug log from ExLogger.");
-        ExLogger.LogInformation(logger, "This is an informational log from ExLogger.");
-        ExLogger.LogWarning(logger, "This is a warning log from ExLogger.");
-        ExLogger.LogError(logger, "This is an error log from ExLogger.");
-        ExLogger.LogCritical(logger, "This is a critical log from ExLogger.", null);
+        ExLogger.LogTrace(logger, "Trace log from ExLogger.");
+        ExLogger.LogDebug(logger, "Debug log from ExLogger.");
+        ExLogger.LogInformation(logger, "Information log from ExLogger.");
+        ExLogger.LogWarning(logger, "Warning log from ExLogger.");
+        ExLogger.LogError(logger, "Error log from ExLogger.");
+        ExLogger.LogCritical(logger, "Critical log from ExLogger.", null);
 
         // ----------------------------------------------------------------
-        // 2. Structured Logging (Arguments)
+        // 2. Structured Logging (placeholders + arguments)
         // ----------------------------------------------------------------
-        ExLogger.LogInformation(logger, "Structured log executed at {DateTime}.", DateTime.UtcNow);
-        ExLogger.LogWarning(logger, "Warning with numbered placeholder {0}.", DateTime.UtcNow);
-        ExLogger.LogDebug(logger, "User {UserId} performed {Action} at {Time}.", 12345, "Login", DateTime.UtcNow);
+        ExLogger.LogInformation(logger, "Structured log executed at {UtcNow}", DateTime.UtcNow);
+        ExLogger.LogWarning(logger, "Warning with numbered placeholder {0}", 42);
+        ExLogger.LogDebug(logger, "User {UserId} performed {Action} at {UtcNow}", 12345, "Login", DateTime.UtcNow);
 
         // ----------------------------------------------------------------
         // 3. Generic Log Method
         // ----------------------------------------------------------------
-        ExLogger.Log(logger, LogLevel.Warning, "Generic log without arguments.");
-        ExLogger.Log(logger, LogLevel.Error, "Generic log executed at {UtcNow}.", DateTime.UtcNow);
+        ExLogger.Log(logger, LogLevel.Trace, "Generic Trace message.");
+        ExLogger.Log(logger, LogLevel.Debug, "Generic Debug with {Id}", Guid.NewGuid());
+        ExLogger.Log(logger, LogLevel.Information, "Generic Info message at {UtcNow}", DateTime.UtcNow);
+        ExLogger.Log(logger, LogLevel.Warning, "Generic Warning message.");
+        ExLogger.Log(logger, LogLevel.Error, "Generic Error message with args: {0}", "arg-value");
+        ExLogger.Log(logger, LogLevel.Critical, "Generic Critical message!");
 
         // ----------------------------------------------------------------
         // 4. Exception Logging
         // ----------------------------------------------------------------
         try
         {
-            const int counter = 5;
-            _ = counter / int.Parse("0"); // Throws DivideByZeroException
+            var x = 0;
+            _ = 10 / x; // will throw DivideByZeroException
         }
         catch (Exception ex)
         {
-            ExLogger.LogException(logger, ex);
-            ExLogger.LogError(logger, "Handled an exception with context.", ex);
+            ExLogger.LogException(logger, ex, "Divide by zero encountered");
+            ExLogger.LogError(logger, "Handled divide by zero exception", ex);
+        }
+
+        try
+        {
+            _ = int.Parse("NotANumber"); // FormatException
+        }
+        catch (Exception ex)
+        {
+            ExLogger.LogException(logger, ex, "Parsing error", moreDetailsEnabled: true);
+            ExLogger.LogCritical(logger, "Critical parsing failure", ex);
         }
 
         // ----------------------------------------------------------------
-        // 5. Log Scopes (Contextual Logging)
+        // 5. Scopes (contextual logging)
         // ----------------------------------------------------------------
-        // Single key-value scope
         using (ExLogger.BeginScope(logger, "RequestId", Guid.NewGuid()))
         {
-            ExLogger.LogInformation(logger, "Processing inside single key-value scope.");
-            ExLogger.LogWarning(logger, "Scoped warning example.");
+            ExLogger.LogInformation(logger, "Inside single key-value scope");
+            ExLogger.LogWarning(logger, "Warning inside single key scope");
         }
 
-        // Multiple key-value pairs
         var context = new Dictionary<string, object>
         {
             ["RequestId"] = Guid.NewGuid(),
-            ["UserId"] = 98765,
+            ["UserId"] = 777,
             ["TransactionId"] = Guid.NewGuid()
         };
 
         using (ExLogger.BeginScope(logger, context))
         {
-            ExLogger.LogInformation(logger, "Processing with multiple contextual values.");
-            ExLogger.LogError(logger, "Error inside multi-key scope.");
+            ExLogger.LogInformation(logger, "Inside multi-key scope");
+            ExLogger.LogError(logger, "Error inside multi-key scope with {TransactionId}", context["TransactionId"]);
         }
 
         // ----------------------------------------------------------------
-        // 6. Mixed Example: Critical Failure in Scope
+        // 6. Mixed Example: Scoped critical failure
         // ----------------------------------------------------------------
         try
         {
-            _ = int.Parse("NotANumber"); // Will throw FormatException
+            string? nullString = null;
+            _ = nullString!.Length; // NullReferenceException
         }
         catch (Exception ex)
         {
-            using (ExLogger.BeginScope(logger, "RequestId", Guid.NewGuid()))
+            using (ExLogger.BeginScope(logger, "Operation", "ScopedCriticalTest"))
             {
-                ExLogger.LogException(logger, ex);
-                ExLogger.LogCritical(logger, "Critical failure inside scoped context.", ex);
+                ExLogger.LogException(logger, ex, "Critical failure in scoped operation");
+                ExLogger.LogCritical(logger, "Scoped critical error occurred", ex);
             }
         }
 
         // ----------------------------------------------------------------
-        // 7. High Throughput Example (simulated heavy logging)
+        // 7. Optional: simulate a burst of logs (high throughput)
         // ----------------------------------------------------------------
-        for (var i = 0; i < 1000; i++) // simulate 1000 logs in quick succession
+        for (var i = 0; i < 5; i++) // keep small for demo
         {
-            ExLogger.LogDebug(logger, "High-throughput log #{LogIndex} at {UtcNow}.", i, DateTime.UtcNow);
+            ExLogger.LogDebug(logger, "High-throughput log {Index} at {UtcNow}", i, DateTime.UtcNow);
+            await Task.Delay(10); // simulate work
         }
 
-        return new OkObjectResult("Logger executed successfully with all features.");
+        return new OkObjectResult(new
+        {
+            Message = "ExLogger test executed successfully",
+            Timestamp = DateTime.UtcNow
+        });
     }
 }
