@@ -1,9 +1,9 @@
 {
-  "profiles": {
-    "LogFunction.Core": {
-      "commandName": "Project",
-      "commandLineArgs": "--port 7110",
-      "launchBrowser": false
+    "profiles": {
+        "LogFunction.Core": {
+            "commandName": "Project",
+            "commandLineArgs": "--port 7110",
+            "launchBrowser": false
+        }
     }
-  }
 }
