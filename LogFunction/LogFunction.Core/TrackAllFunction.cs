@@ -23,11 +23,11 @@ namespace LogFunction.Core;
 /// </para>
 /// <para>
 /// ⚠️ NOTE:
-/// * In this demo we use "using var" for <see cref="BatchLogger"/> to ensure cleanup per request.
-/// * In production you would typically register <see cref="BatchLogger"/> as a Singleton via DI.
+/// * In this demo <see cref="BatchLogger"/> is injected via DI as a Singleton.
+/// * In production this ensures only one background worker drains logs, shared across all requests.
 /// </para>
 /// </summary>
-public class TrackAllFunction(ILogger<TrackAllFunction> logger)
+public class TrackAllFunction(ILogger<TrackAllFunction> logger, BatchLogger batchLogger)
 {
     [Function("logger-test")]
     public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post")] HttpRequest req)
@@ -40,14 +40,8 @@ public class TrackAllFunction(ILogger<TrackAllFunction> logger)
         DemoExLogger(logger);
 
         // ====================================================================
-        // SECTION B: BatchLogger Demo
+        // SECTION B: BatchLogger Demo (injected via DI)
         // ====================================================================
-        using var batchLogger = new BatchLogger(
-            logger,
-            capacity: 5000,                  // max buffered messages
-            batchSize: 100,                  // flush when 100 reached
-            flushInterval: TimeSpan.FromMilliseconds(200)); // or flush on interval
-
         DemoBatchLogger(batchLogger);
 
         // ====================================================================

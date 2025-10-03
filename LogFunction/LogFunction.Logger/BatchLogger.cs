@@ -1,4 +1,5 @@
-﻿using System.Threading.Channels;
+﻿using System.Buffers;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 
 namespace LogFunction.Logger;
@@ -13,6 +14,7 @@ namespace LogFunction.Logger;
 /// <para>
 /// Features:
 /// <list type="bullet">
+///   <item>Implements <see cref="ILogger"/> so it can be injected via DI.</item>
 ///   <item>Non-blocking writes via <see cref="Channel{T}"/> (drops oldest entries if full).</item>
 ///   <item>Configurable buffer <c>capacity</c>, <c>batchSize</c>, and <c>flushInterval</c>.</item>
 ///   <item>Background worker task flushes buffered logs asynchronously.</item>
@@ -27,12 +29,13 @@ namespace LogFunction.Logger;
 /// In short-lived contexts (e.g., Azure Functions), always wrap in <c>using</c> so <see cref="Dispose"/> flushes remaining logs.
 /// </para>
 /// </summary>
-public sealed class BatchLogger : IDisposable
+public sealed class BatchLogger : ILogger, IDisposable
 {
     private readonly ILogger _logger;                        // Underlying sink (console, file, etc.)
     private readonly Channel<LogEntry> _channel;             // Bounded channel buffer for logs
     private readonly CancellationTokenSource _cts = new();   // Cancellation token for background worker
     private readonly Task _backgroundTask;                   // Background task that drains logs
+    private readonly List<LogEntry> _buffer;                 // Reused buffer to reduce allocations
 
     /// <summary>
     /// Formatter used for exception logs in this <see cref="BatchLogger"/> instance.
@@ -55,6 +58,7 @@ public sealed class BatchLogger : IDisposable
         TimeSpan? flushInterval = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _buffer = new List<LogEntry>(batchSize);
 
         // Create bounded channel (drops oldest entries if full to prevent blocking producers)
         _channel = Channel.CreateBounded<LogEntry>(new BoundedChannelOptions(capacity)
@@ -70,38 +74,54 @@ public sealed class BatchLogger : IDisposable
     }
 
     // ----------------------------------------------------------------
+    // ILogger Implementation
+    // ----------------------------------------------------------------
+
+    /// <inheritdoc/>
+    public bool IsEnabled(LogLevel logLevel) => _logger.IsEnabled(logLevel);
+
+    /// <inheritdoc/>
+    public void Log<TState>(LogLevel logLevel, EventId eventId,
+        TState state, Exception exception, Func<TState, Exception, string> formatter)
+    {
+        if (!IsEnabled(logLevel))
+        {
+            return;
+        }
+
+        var message = formatter != null ? formatter(state, exception) : state?.ToString() ?? "N/A";
+
+        // Use ArrayPool for args when logging structured state (optimization)
+        var args = Array.Empty<object>();
+        if (state is IEnumerable<KeyValuePair<string, object>> kvps)
+        {
+            args = [.. kvps.Select(kv => kv.Value ?? "N/A")];
+        }
+
+        _ = _channel.Writer.TryWrite(new LogEntry(logLevel, message, exception, args));
+    }
+
+    // ----------------------------------------------------------------
     // 🚀 Shorthand wrappers for log levels (with/without exception args)
     // ----------------------------------------------------------------
 
-    public void LogTrace(string message, Exception exception, params object[] args) =>
-        Log(LogLevel.Trace, message, exception, args);
+    public void LogTrace(string message, Exception exception = null, params object[] args) =>
+        LogInternal(LogLevel.Trace, message, exception, args);
 
-    public void LogTrace(string message) => Log(LogLevel.Trace, message, null);
+    public void LogDebug(string message, Exception exception = null, params object[] args) =>
+        LogInternal(LogLevel.Debug, message, exception, args);
 
-    public void LogDebug(string message, Exception exception, params object[] args) =>
-        Log(LogLevel.Debug, message, exception, args);
+    public void LogInformation(string message, Exception exception = null, params object[] args) =>
+        LogInternal(LogLevel.Information, message, exception, args);
 
-    public void LogDebug(string message) => Log(LogLevel.Debug, message, null);
+    public void LogWarning(string message, Exception exception = null, params object[] args) =>
+        LogInternal(LogLevel.Warning, message, exception, args);
 
-    public void LogInformation(string message, Exception exception, params object[] args) =>
-        Log(LogLevel.Information, message, exception, args);
+    public void LogError(string message, Exception exception = null, params object[] args) =>
+        LogInternal(LogLevel.Error, message, exception, args);
 
-    public void LogInformation(string message) => Log(LogLevel.Information, message, null);
-
-    public void LogWarning(string message, Exception exception, params object[] args) =>
-        Log(LogLevel.Warning, message, exception, args);
-
-    public void LogWarning(string message) => Log(LogLevel.Warning, message, null);
-
-    public void LogError(string message, Exception exception, params object[] args) =>
-        Log(LogLevel.Error, message, exception, args);
-
-    public void LogError(string message) => Log(LogLevel.Error, message, null);
-
-    public void LogCritical(string message, Exception exception, params object[] args) =>
-        Log(LogLevel.Critical, message, exception, args);
-
-    public void LogCritical(string message) => Log(LogLevel.Critical, message, null);
+    public void LogCritical(string message, Exception exception = null, params object[] args) =>
+        LogInternal(LogLevel.Critical, message, exception, args);
 
     // ----------------------------------------------------------------
     // 🛠 Exception helpers (mirror ExLogger API, but allow per-instance formatter)
@@ -113,15 +133,14 @@ public sealed class BatchLogger : IDisposable
     public void LogErrorException(Exception ex, string title = "System Error", bool moreDetailsEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(ex);
-        if (!_logger.IsEnabled(LogLevel.Error))
+        if (!IsEnabled(LogLevel.Error))
         {
             return;
         }
 
-        // Use instance-level formatter (falls back to ExLogger's default if unchanged)
         var formatter = ExceptionFormatter ?? ExLogger.ExceptionFormatter;
         var msg = formatter(ex, title, moreDetailsEnabled);
-        Log(LogLevel.Error, msg, ex);
+        LogInternal(LogLevel.Error, msg, ex);
     }
 
     /// <summary>
@@ -130,19 +149,23 @@ public sealed class BatchLogger : IDisposable
     public void LogCriticalException(Exception ex, string title = "Critical System Error", bool moreDetailsEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(ex);
-        if (!_logger.IsEnabled(LogLevel.Critical))
+        if (!IsEnabled(LogLevel.Critical))
         {
             return;
         }
 
         var formatter = ExceptionFormatter ?? ExLogger.ExceptionFormatter;
         var msg = formatter(ex, title, moreDetailsEnabled);
-        Log(LogLevel.Critical, msg, ex);
+        LogInternal(LogLevel.Critical, msg, ex);
     }
 
     // ----------------------------------------------------------------
     // 🔎 Scope support (passthrough to underlying ILogger)
     // ----------------------------------------------------------------
+
+    /// <inheritdoc/>
+    public IDisposable BeginScope<TState>(TState state) =>
+        _logger.BeginScope(state) ?? NullScope.Instance;
 
     /// <summary>
     /// Begins a structured logging scope with a single key-value pair.
@@ -163,17 +186,15 @@ public sealed class BatchLogger : IDisposable
     // ----------------------------------------------------------------
 
     /// <summary>
-    /// Queues a log entry (non-blocking).
-    /// If buffer is full, the oldest entry is dropped.
+    /// Internal enqueue helper for shorthand methods.
     /// </summary>
-    private void Log(LogLevel level, string message, Exception exception = null, params object[] args)
+    private void LogInternal(LogLevel level, string message, Exception exception, params object[] args)
     {
-        if (!_logger.IsEnabled(level))
+        if (!IsEnabled(level))
         {
             return;
         }
 
-        // TryWrite is non-blocking; drops if full (due to DropOldest mode)
         _ = _channel.Writer.TryWrite(
             new LogEntry(level, message ?? "N/A", exception, args ?? Array.Empty<object>())
         );
@@ -184,29 +205,23 @@ public sealed class BatchLogger : IDisposable
     /// </summary>
     private async Task ProcessAsync(int batchSize, TimeSpan flushInterval, CancellationToken token)
     {
-        var buffer = new List<LogEntry>(batchSize);
-
         try
         {
             while (await _channel.Reader.WaitToReadAsync(token).ConfigureAwait(false))
             {
-                // Drain available entries quickly
                 while (_channel.Reader.TryRead(out var entry))
                 {
-                    buffer.Add(entry);
-
-                    // Flush immediately if batch is full
-                    if (buffer.Count >= batchSize)
+                    _buffer.Add(entry);
+                    if (_buffer.Count >= batchSize)
                     {
-                        Flush(buffer);
+                        Flush(_buffer);
                     }
                 }
 
-                // Flush periodically even if batch not full
-                if (buffer.Count > 0)
+                if (_buffer.Count > 0)
                 {
                     await Task.Delay(flushInterval, token).ConfigureAwait(false);
-                    Flush(buffer);
+                    Flush(_buffer);
                 }
             }
         }
@@ -225,32 +240,25 @@ public sealed class BatchLogger : IDisposable
         {
             ExLogger.Log(_logger, entry.Level, entry.Message, entry.Exception, entry.Args);
         }
-
-        buffer.Clear(); // Reuse the list buffer
+        buffer.Clear();
     }
 
     /// <summary>
     /// Manually flushes buffered entries immediately.
-    /// Useful for short-lived contexts (Azure Functions) to ensure logs are written
-    /// before returning a response, without waiting for <see cref="Dispose"/>.
     /// </summary>
     public async Task FlushAsync(CancellationToken token = default)
     {
-        var buffer = new List<LogEntry>();
-
-        // Drain channel synchronously until empty
         while (_channel.Reader.TryRead(out var entry))
         {
             token.ThrowIfCancellationRequested();
-            buffer.Add(entry);
+            _buffer.Add(entry);
         }
 
-        if (buffer.Count > 0)
+        if (_buffer.Count > 0)
         {
-            Flush(buffer);
+            Flush(_buffer);
         }
 
-        // Yield back so background worker can finish pending writes
         await Task.Yield();
     }
 
@@ -258,16 +266,12 @@ public sealed class BatchLogger : IDisposable
     // Cleanup
     // ----------------------------------------------------------------
 
-    /// <summary>
-    /// Stops background task and flushes remaining logs synchronously.
-    /// </summary>
     public void Dispose()
     {
         _cts.Cancel();
 
         try
         {
-            // Ensure background task finishes
             _backgroundTask.GetAwaiter().GetResult();
         }
         catch (OperationCanceledException)
@@ -276,19 +280,16 @@ public sealed class BatchLogger : IDisposable
         }
         catch (Exception ex)
         {
-            // Should not happen, log synchronously if it does
             ExLogger.Log(_logger, LogLevel.Error, "BatchLogger background task error during Dispose", ex);
         }
 
-        // Final flush of anything left in channel
-        var buffer = new List<LogEntry>();
         while (_channel.Reader.TryRead(out var entry))
         {
-            buffer.Add(entry);
+            _buffer.Add(entry);
         }
-        if (buffer.Count > 0)
+        if (_buffer.Count > 0)
         {
-            Flush(buffer);
+            Flush(_buffer);
         }
 
         _cts.Dispose();
