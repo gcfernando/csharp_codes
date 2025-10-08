@@ -172,14 +172,14 @@ public sealed class BatchLogger : ILogger, IDisposable
     /// Useful for correlating logs (e.g., RequestId, UserId).
     /// </summary>
     public IDisposable BeginScope(string key, object value) =>
-        ExLogger.BeginScope(_logger, key, value);
+        _logger.ExBeginScope(key, value);
 
     /// <summary>
     /// Begins a structured logging scope with multiple key-value pairs.
     /// Optimized for small dictionaries (≤4 items) to reduce allocations.
     /// </summary>
     public IDisposable BeginScope(IDictionary<string, object> context) =>
-        ExLogger.BeginScope(_logger, context);
+        _logger.ExBeginScope(context);
 
     // ----------------------------------------------------------------
     // Core: enqueue + background flush loop

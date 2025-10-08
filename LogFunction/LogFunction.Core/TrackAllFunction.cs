@@ -7,24 +7,22 @@ using Microsoft.Extensions.Logging;
 namespace LogFunction.Core;
 
 /// <summary>
-/// Azure Function demonstrating **all possible usages** of <see cref="ExLogger"/> and <see cref="BatchLogger"/>.
+/// Demonstrates **all features** of <see cref="ExLogger"/> and <see cref="BatchLogger"/>.
 /// <para>
-/// Covers:
+/// Includes:
 /// <list type="bullet">
-///   <item>Fast-path delegates (no-arg logs)</item>
-///   <item>Structured logging with {Placeholders}</item>
-///   <item>Generic Log overloads (with/without exception)</item>
-///   <item>Exception logging (default + structured + critical)</item>
-///   <item>Scoped logging (single & multi key scopes)</item>
-///   <item>Async flush demo</item>
-///   <item>Throughput stress loop</item>
-///   <item>Comparison: ExLogger vs BatchLogger</item>
+///   <item>Fast-path delegate logging (allocation-free)</item>
+///   <item>Structured messages with placeholders</item>
+///   <item>Generic overloads and exception handling</item>
+///   <item>Scoped logging (single and multiple keys)</item>
+///   <item>Custom exception formatting</item>
+///   <item>Batch logging with async flush</item>
+///   <item>Throughput stress demonstration</item>
 /// </list>
 /// </para>
 /// <para>
-/// ⚠️ NOTE:
-/// * In this demo <see cref="BatchLogger"/> is injected via DI as a Singleton.
-/// * In production this ensures only one background worker drains logs, shared across all requests.
+/// ⚙️ <b>Note:</b> In production, register <see cref="BatchLogger"/> as a Singleton in DI.
+/// This ensures only one background drain task across all Azure Function instances.
 /// </para>
 /// </summary>
 public class TrackAllFunction(ILogger<TrackAllFunction> logger, BatchLogger batchLogger)
@@ -34,78 +32,82 @@ public class TrackAllFunction(ILogger<TrackAllFunction> logger, BatchLogger batc
     {
         ArgumentNullException.ThrowIfNull(req);
 
-        // ====================================================================
-        // SECTION A: ExLogger Demo
-        // ====================================================================
+        // ===============================================================
+        // SECTION A: ExLogger — Direct / Immediate Logging
+        // ===============================================================
         DemoExLogger(logger);
 
-        // ====================================================================
-        // SECTION B: BatchLogger Demo (injected via DI)
-        // ====================================================================
+        // ===============================================================
+        // SECTION B: BatchLogger — Buffered / Asynchronous Logging
+        // ===============================================================
         DemoBatchLogger(batchLogger);
 
-        // ====================================================================
-        // SECTION C: Mini stress test (BatchLogger throughput)
-        // ====================================================================
+        // ===============================================================
+        // SECTION C: Throughput Stress Test
+        // ===============================================================
         for (var i = 0; i < 20; i++)
         {
-            // 🚀 Enqueue 20 logs quickly (non-blocking)
-            batchLogger.LogInformation("High-throughput batching log {Index} at {UtcNow}", null, i, DateTime.UtcNow);
+            batchLogger.LogInformation(
+                "Throughput test log #{Index} at {UtcNow}",
+                null,
+                i,
+                DateTime.UtcNow
+            );
         }
 
-        // Explicit flush ensures logs are written before HTTP response (important in Functions!)
+        // Explicit flush (important for short-lived Function executions)
         await batchLogger.FlushAsync();
 
-        // ====================================================================
-        // Final HTTP response
-        // ====================================================================
+        // ===============================================================
+        // SECTION D: Return HTTP Response
+        // ===============================================================
         return new OkObjectResult(new
         {
-            Message = "Logger demo executed. Check logs for ExLogger and BatchLogger usage.",
+            Message = "Logger demo completed. Check console or Application Insights logs.",
             Timestamp = DateTime.UtcNow
         });
     }
 
-    // ============================================================
-    // ExLogger demo
-    // ============================================================
+    // -----------------------------------------------------------------
+    // 🧩 ExLogger: Demonstration of All Logging Capabilities
+    // -----------------------------------------------------------------
     private static void DemoExLogger(ILogger logger)
     {
-        // ---- Fast-path delegates (precompiled for performance) ----
-        ExLogger.LogTrace(logger, "ExLogger Trace");
-        ExLogger.LogDebug(logger, "ExLogger Debug");
-        ExLogger.LogInformation(logger, "ExLogger Info");
-        ExLogger.LogWarning(logger, "ExLogger Warning");
-        ExLogger.LogError(logger, "ExLogger Error");
-        ExLogger.LogCritical(logger, "ExLogger Critical", exception: null);
+        // --- 1️⃣ Fast-path (predefined delegates for zero allocation) ---
+        logger.ExLogTrace("ExLogger Trace message");
+        logger.ExLogDebug("ExLogger Debug message");
+        logger.ExLogInformation("ExLogger Information message");
+        logger.ExLogWarning("ExLogger Warning message");
+        logger.ExLogError("ExLogger Error message");
+        logger.ExLogCritical("ExLogger Critical message");
 
-        // ---- Structured logs ----
-        ExLogger.LogInformation(logger, "ExLogger structured info {UtcNow}", DateTime.UtcNow);
-        ExLogger.LogDebug(logger, "ExLogger User {UserId} performed {Action}", 42, "Login");
+        // --- 2️⃣ Structured Logging ---
+        logger.ExLogInformation("Structured info at {UtcNow}", DateTime.UtcNow);
+        logger.ExLogDebug("User {UserId} performed {Action}", 42, "Login");
 
-        // ---- Generic overloads ----
-        ExLogger.Log(logger, LogLevel.Information, "Generic info message");
-        ExLogger.Log(logger, LogLevel.Warning, "Generic warning with {Id}", Guid.NewGuid());
+        // --- 3️⃣ Generic overloads ---
+        ExLogger.Log(logger, LogLevel.Information, "Generic info via Log() helper");
+        ExLogger.Log(logger, LogLevel.Warning, "Generic warning with Guid {Id}", Guid.NewGuid());
 
-        // ---- Exception logging ----
+        // --- 4️⃣ Exception Handling ---
         try
         {
-            throw new InvalidOperationException("ExLogger demo exception");
+            throw new InvalidOperationException("Sample ExLogger exception");
         }
         catch (Exception ex)
         {
-            // Error & Critical exception logging
-            ExLogger.LogErrorException(logger, ex, "Error logged with default formatter");
-            ExLogger.LogCriticalException(logger, ex, "Critical error with default formatter");
+            // Automatic formatting (default formatter)
+            logger.ExLogErrorException(ex, "Handled exception via ExLogger");
+            logger.ExLogCriticalException(ex, "Critical exception via ExLogger");
 
-            // Structured template overload with exception
-            ExLogger.Log(logger, LogLevel.Error, ex, "Structured exception with {Timestamp}", DateTime.UtcNow);
+            // Structured message template + exception
+            ExLogger.Log(logger, LogLevel.Error, ex, "Structured exception at {Now}", DateTime.UtcNow);
         }
 
-        // ---- Scoped logging (adds context to logs) ----
-        using (ExLogger.BeginScope(logger, "RequestId", Guid.NewGuid()))
+        // --- 5️⃣ Scoped Logging (adds contextual metadata) ---
+        using (logger.ExBeginScope("RequestId", Guid.NewGuid()))
         {
-            ExLogger.LogInformation(logger, "Inside single-key ExLogger scope");
+            logger.ExLogInformation("Inside single-key ExLogger scope");
         }
 
         var ctx = new Dictionary<string, object>
@@ -114,46 +116,48 @@ public class TrackAllFunction(ILogger<TrackAllFunction> logger, BatchLogger batc
             ["TransactionId"] = Guid.NewGuid()
         };
 
-        using (ExLogger.BeginScope(logger, ctx))
+        using (logger.ExBeginScope(ctx))
         {
-            ExLogger.LogWarning(logger, "Inside multi-key ExLogger scope");
+            logger.ExLogWarning("Inside multi-key ExLogger scope");
         }
     }
 
-    // ============================================================
-    // BatchLogger demo
-    // ============================================================
-    private static void DemoBatchLogger(BatchLogger batchingLogger)
+    // -----------------------------------------------------------------
+    // ⚡ BatchLogger: Buffered, Asynchronous Logging Demo
+    // -----------------------------------------------------------------
+    private static void DemoBatchLogger(BatchLogger batchLogger)
     {
-        // ---- Basic logs ----
-        batchingLogger.LogTrace("BatchLogger Trace");
-        batchingLogger.LogDebug("BatchLogger Debug");
-        batchingLogger.LogInformation("BatchLogger Info");
-        batchingLogger.LogWarning("BatchLogger Warning");
-        batchingLogger.LogError("BatchLogger Error");
-        batchingLogger.LogCritical("BatchLogger Critical");
+        // --- 1️⃣ Basic Logging ---
+        batchLogger.LogTrace("BatchLogger Trace message");
+        batchLogger.LogDebug("BatchLogger Debug message");
+        batchLogger.LogInformation("BatchLogger Information message");
+        batchLogger.LogWarning("BatchLogger Warning message");
+        batchLogger.LogError("BatchLogger Error message");
+        batchLogger.LogCritical("BatchLogger Critical message");
 
-        // ---- Structured logs ----
-        batchingLogger.LogInformation("Batch info {UtcNow}", null, DateTime.UtcNow);
-        batchingLogger.LogDebug("Batch user {UserId} did {Action}", null, 7, "Checkout");
+        // --- 2️⃣ Structured Logging ---
+        batchLogger.LogInformation("Structured batch log {UtcNow}", null, DateTime.UtcNow);
+        batchLogger.LogDebug("Batch user {UserId} executed {Action}", null, 7, "Checkout");
 
-        // ---- Exception logging ----
+        // --- 3️⃣ Exception Logging ---
         try
         {
-            throw new ArgumentNullException(nameof(batchingLogger), "BatchLogger demo exception");
+            throw new ArgumentNullException(nameof(batchLogger), "Simulated BatchLogger exception");
         }
         catch (Exception ex)
         {
-            batchingLogger.LogError("BatchLogger error with exception {Code}", ex, "ERR123");
-            batchingLogger.LogCritical("BatchLogger critical failure {OpId}", ex, Guid.NewGuid());
-            batchingLogger.LogErrorException(ex, "Error (formatter demo)");
-            batchingLogger.LogCriticalException(ex, "Critical (formatter demo)");
+            batchLogger.LogError("Batch error with exception {Code}", ex, "ERR-001");
+            batchLogger.LogCritical("Batch critical failure {OpId}", ex, Guid.NewGuid());
+
+            // Formatted exceptions
+            batchLogger.LogErrorException(ex, "Batch Error (formatter demo)");
+            batchLogger.LogCriticalException(ex, "Batch Critical (formatter demo)");
         }
 
-        // ---- Scoped logging ----
-        using (batchingLogger.BeginScope("BatchRequestId", Guid.NewGuid()))
+        // --- 4️⃣ Scoped Logging ---
+        using (batchLogger.BeginScope("BatchScopeId", Guid.NewGuid()))
         {
-            batchingLogger.LogInformation("Inside single-key BatchLogger scope");
+            batchLogger.LogInformation("Inside single-key BatchLogger scope");
         }
 
         var ctx = new Dictionary<string, object>
@@ -162,9 +166,9 @@ public class TrackAllFunction(ILogger<TrackAllFunction> logger, BatchLogger batc
             ["BatchTxnId"] = Guid.NewGuid()
         };
 
-        using (batchingLogger.BeginScope(ctx))
+        using (batchLogger.BeginScope(ctx))
         {
-            batchingLogger.LogWarning("Inside multi-key BatchLogger scope");
+            batchLogger.LogWarning("Inside multi-key BatchLogger scope");
         }
     }
 }

@@ -26,9 +26,9 @@ public class ExceptionBenchmarks
 
     [Benchmark]
     public void Format_Simple() =>
-        ExLogger.LogErrorException(_logger, _simple, "Simple error", moreDetailsEnabled: true);
+        ExLogger.ExLogErrorException(_logger, _simple, "Simple error", moreDetailsEnabled: true);
 
     [Benchmark]
     public void Format_Deep() =>
-        ExLogger.LogErrorException(_logger, _deep, "Deep error", moreDetailsEnabled: true);
+        ExLogger.ExLogErrorException(_logger, _deep, "Deep error", moreDetailsEnabled: true);
 }

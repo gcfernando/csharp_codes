@@ -32,7 +32,7 @@ public class LoggerComparisonBenchmarks
 
     [Benchmark]
     public void ExLogger_LogInformation() =>
-        ExLogger.LogInformation(_logger, "User {UserId} logged in", 42);
+        ExLogger.ExLogInformation(_logger, "User {UserId} logged in", 42);
 
     [Benchmark]
     public void BatchingLogger_LogInformation() =>
@@ -47,7 +47,7 @@ public class LoggerComparisonBenchmarks
 
     [Benchmark]
     public void ExLogger_LogWarning() =>
-        ExLogger.LogWarning(_logger, "Low disk space on {Drive}", "C:");
+        ExLogger.ExLogWarning(_logger, "Low disk space on {Drive}", "C:");
 
     [Benchmark]
     public void BatchingLogger_LogWarning() =>
@@ -62,7 +62,7 @@ public class LoggerComparisonBenchmarks
 
     [Benchmark]
     public void ExLogger_LogError() =>
-        ExLogger.LogError(_logger, "Error for user {UserId}", _ex, 42);
+        ExLogger.ExLogError(_logger, "Error for user {UserId}", _ex, 42);
 
     [Benchmark]
     public void BatchingLogger_LogError() =>
@@ -77,7 +77,7 @@ public class LoggerComparisonBenchmarks
 
     [Benchmark]
     public void ExLogger_LogCritical() =>
-        ExLogger.LogCritical(_logger, "Critical failure {OpId}", _ex, Guid.NewGuid());
+        ExLogger.ExLogCritical(_logger, "Critical failure {OpId}", _ex, Guid.NewGuid());
 
     [Benchmark]
     public void BatchingLogger_LogCritical() =>
@@ -92,7 +92,7 @@ public class LoggerComparisonBenchmarks
 
     [Benchmark]
     public void ExLogger_LogTrace() =>
-        ExLogger.LogTrace(_logger, "Trace message");
+        ExLogger.ExLogTrace(_logger, "Trace message");
 
     [Benchmark]
     public void BatchingLogger_LogTrace() =>
@@ -115,7 +115,7 @@ public class LoggerComparisonBenchmarks
     {
         for (int i = 0; i < 1000; i++)
         {
-            ExLogger.LogInformation(_logger, "ExLogger looped log {Index}", i);
+            ExLogger.ExLogInformation(_logger, "ExLogger looped log {Index}", i);
         }
     }
 
