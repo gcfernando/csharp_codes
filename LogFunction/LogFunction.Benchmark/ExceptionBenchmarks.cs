@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace LogFunction.Benchmark;
 
 [GcServer(true)]
-[GcForce(true)]
 [ThreadingDiagnoser]
 [MemoryDiagnoser(displayGenColumns: true)]
 public class ExceptionBenchmarks
@@ -25,10 +24,8 @@ public class ExceptionBenchmarks
     }
 
     [Benchmark]
-    public void Format_Simple() =>
-        ExLogger.ExLogErrorException(_logger, _simple, "Simple error", moreDetailsEnabled: true);
+    public void Format_Simple() => ExLogger.ExLogErrorException(_logger, _simple, "Simple error", moreDetailsEnabled: true);
 
     [Benchmark]
-    public void Format_Deep() =>
-        ExLogger.ExLogErrorException(_logger, _deep, "Deep error", moreDetailsEnabled: true);
+    public void Format_Deep() => ExLogger.ExLogErrorException(_logger, _deep, "Deep error", moreDetailsEnabled: true);
 }
