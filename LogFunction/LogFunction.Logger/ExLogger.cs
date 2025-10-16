@@ -61,7 +61,7 @@ public static class ExLogger
         return (uint)idx < (uint)_byLevel.Length ? _byLevel[idx] : _info;
     }
 
-    #endregion
+    #endregion Predefined Delegates for Performance
 
     #region Cached EventIds
 
@@ -85,7 +85,7 @@ public static class ExLogger
         _ => _unknownId
     };
 
-    #endregion
+    #endregion Cached EventIds
 
     #region Timestamp Cache (Allocation-Free UTC)
 
@@ -133,7 +133,7 @@ public static class ExLogger
         }
     }
 
-    #endregion
+    #endregion Timestamp Cache (Allocation-Free UTC)
 
     #region Object Pool & Exception Formatter
 
@@ -153,7 +153,7 @@ public static class ExLogger
         set => _exceptionFormatter = value ?? FormatExceptionMessageInternal;
     }
 
-    #endregion
+    #endregion Object Pool & Exception Formatter
 
     #region Generic Log Methods
 
@@ -257,7 +257,7 @@ public static class ExLogger
         Resolve(level)(logger, message ?? "N/A", exception);
     }
 
-    #endregion
+    #endregion Generic Log Methods
 
     #region Convenience Methods
 
@@ -351,7 +351,7 @@ public static class ExLogger
         Log(logger, LogLevel.Critical, message, args);
     }
 
-    #endregion
+    #endregion Convenience Methods
 
     #region Exception Logging
 
@@ -461,7 +461,7 @@ public static class ExLogger
         }
     }
 
-    #endregion
+    #endregion Exception Logging
 
     #region Log Scope Helper
 
@@ -536,6 +536,7 @@ public static class ExLogger
         public Enumerator GetEnumerator() => new(_pair);
 
         IEnumerator<KeyValuePair<string, object>> IEnumerable<KeyValuePair<string, object>>.GetEnumerator() => GetEnumerator();
+
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -544,6 +545,7 @@ public static class ExLogger
         public struct Enumerator : IEnumerator<KeyValuePair<string, object>>
         {
             private bool _moved;
+
             public Enumerator(KeyValuePair<string, object> value) => (Current, _moved) = (value, false);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -565,7 +567,8 @@ public static class ExLogger
             public void Reset() => _moved = false;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-            public readonly void Dispose() { }
+            public readonly void Dispose()
+            { }
         }
     }
 
@@ -578,7 +581,9 @@ public static class ExLogger
 
         public int Count => _items.Count;
         public KeyValuePair<string, object> this[int index] => _items[index];
+
         public IEnumerator<KeyValuePair<string, object>> GetEnumerator() => _items.GetEnumerator();
+
         IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -618,6 +623,7 @@ public static class ExLogger
         public Enumerator GetEnumerator() => new(_items);
 
         IEnumerator<KeyValuePair<string, object>> IEnumerable<KeyValuePair<string, object>>.GetEnumerator() => GetEnumerator();
+
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         public struct Enumerator : IEnumerator<KeyValuePair<string, object>>
@@ -638,7 +644,8 @@ public static class ExLogger
             public void Reset() => _index = -1;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-            public readonly void Dispose() { }
+            public readonly void Dispose()
+            { }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -672,13 +679,14 @@ public static class ExLogger
         public DisposableScope(object state) => _state = state;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        public void Dispose() { }
+        public void Dispose()
+        { }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public override string ToString() => _state.ToString() ?? string.Empty;
     }
 
-    #endregion
+    #endregion Log Scope Helper
 
     #region Extensibility Hooks (Async/Batch Ready)
 
@@ -704,5 +712,5 @@ public static class ExLogger
         }
     }
 
-    #endregion
+    #endregion Extensibility Hooks (Async/Batch Ready)
 }
