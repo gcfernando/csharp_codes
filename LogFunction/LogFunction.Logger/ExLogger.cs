@@ -9,7 +9,7 @@ using Microsoft.Extensions.ObjectPool;
 /*
  * Developer ::> Gehan Fernando
  * Date      ::> 15-Sep-2025
-*/
+ */
 
 namespace LogFunction.Logger;
 
@@ -54,14 +54,14 @@ public static class ExLogger
         _noop
     ];
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static Action<ILogger, string, Exception> Resolve(LogLevel level)
     {
         var idx = (int)level;
         return (uint)idx < (uint)_byLevel.Length ? _byLevel[idx] : _info;
     }
 
-    #endregion Predefined Delegates for Performance
+    #endregion
 
     #region Cached EventIds
 
@@ -71,10 +71,9 @@ public static class ExLogger
     private static readonly EventId _warnId = new(4, "WarningEvent");
     private static readonly EventId _errorId = new(5, "ErrorEvent");
     private static readonly EventId _criticalId = new(6, "CriticalEvent");
-
     private static readonly EventId _unknownId = new(9999, "UnknownEvent");
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static EventId GetEventId(LogLevel level) => level switch
     {
         LogLevel.Trace => _traceId,
@@ -86,7 +85,7 @@ public static class ExLogger
         _ => _unknownId
     };
 
-    #endregion Cached EventIds
+    #endregion
 
     #region Timestamp Cache (Allocation-Free UTC)
 
@@ -94,10 +93,11 @@ public static class ExLogger
     private static readonly Timer _utcCacheTimer = new(UpdateUtc, null, 0, 1);
     private static volatile string _cachedUtc = FormatUtc();
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static void UpdateUtc(object _) =>
         Interlocked.Exchange(ref _cachedUtc, FormatUtc());
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static string FormatUtc()
     {
         var buf = _utcBuffer?.Value ?? new char[33];
@@ -105,18 +105,18 @@ public static class ExLogger
         return new string(buf, 0, len);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ShutdownUtcTimer()
     {
         try
         {
             _ = Interlocked.Exchange(ref _cachedUtc, FormatUtc());
-
             _ = _utcCacheTimer.Change(Timeout.Infinite, Timeout.Infinite);
             _utcCacheTimer.Dispose();
         }
         catch (ObjectDisposedException)
         {
-            // Timer already disposed — ignore safely.
+            /* Exception intentionally ignored; no corrective action required. */
         }
     }
 
@@ -127,13 +127,13 @@ public static class ExLogger
         {
             ShutdownUtcTimer();
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
-            // swallow — safe cleanup only
+            Debug.WriteLine($"ExLogger.SafeShutdown encountered non-fatal error: {ex}");
         }
     }
 
-    #endregion Timestamp Cache (Allocation-Free UTC)
+    #endregion
 
     #region Object Pool & Exception Formatter
 
@@ -147,20 +147,21 @@ public static class ExLogger
 
     public static Func<Exception, string, bool, string> ExceptionFormatter
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         get => _exceptionFormatter;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         set => _exceptionFormatter = value ?? FormatExceptionMessageInternal;
     }
 
-    #endregion Object Pool & Exception Formatter
+    #endregion
 
     #region Generic Log Methods
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Log(ILogger logger, LogLevel level, string message)
     {
         ArgumentNullException.ThrowIfNull(logger);
+
         if (!logger.IsEnabled(level))
         {
             return;
@@ -169,10 +170,11 @@ public static class ExLogger
         Resolve(level)(logger, message ?? "N/A", null);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Log<T1>(ILogger logger, LogLevel level, string message, T1 arg1)
     {
         ArgumentNullException.ThrowIfNull(logger);
+
         if (!logger.IsEnabled(level))
         {
             return;
@@ -181,10 +183,11 @@ public static class ExLogger
         logger.Log(level, GetEventId(level), null, message ?? "N/A", arg1);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Log<T1, T2>(ILogger logger, LogLevel level, string message, T1 arg1, T2 arg2)
     {
         ArgumentNullException.ThrowIfNull(logger);
+
         if (!logger.IsEnabled(level))
         {
             return;
@@ -193,7 +196,7 @@ public static class ExLogger
         logger.Log(level, GetEventId(level), null, message ?? "N/A", arg1, arg2);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Log(ILogger logger, LogLevel level, string message, Exception exception, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -204,7 +207,6 @@ public static class ExLogger
         }
 
         message ??= "N/A";
-
         if (args is null || args.Length == 0)
         {
             Resolve(level)(logger, message, exception);
@@ -214,11 +216,11 @@ public static class ExLogger
         logger.Log(level, GetEventId(level), exception, message, args);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Log(ILogger logger, LogLevel level, string message, params object[] args) =>
         Log(logger, level, message, null, args);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Log(ILogger logger, LogLevel level, Exception exception, string messageTemplate, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -230,11 +232,10 @@ public static class ExLogger
         }
 
         messageTemplate ??= "N/A";
-
         logger.Log(level, GetEventId(level), exception, messageTemplate, args ?? Array.Empty<object>());
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static void LogNoArgs(ILogger logger, LogLevel level, string message)
     {
         if (!logger.IsEnabled(level))
@@ -245,7 +246,7 @@ public static class ExLogger
         Resolve(level)(logger, message ?? "N/A", null);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static void LogNoArgs(ILogger logger, LogLevel level, string message, Exception exception)
     {
         if (!logger.IsEnabled(level))
@@ -256,71 +257,55 @@ public static class ExLogger
         Resolve(level)(logger, message ?? "N/A", exception);
     }
 
-    #endregion Generic Log Methods
+    #endregion
 
     #region Convenience Methods
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ExLogTrace(this ILogger logger, string message, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(message);
 
         if (args is null || args.Length == 0)
-        {
-            LogNoArgs(logger, LogLevel.Trace, message);
-            return;
-        }
-
+        { LogNoArgs(logger, LogLevel.Trace, message); return; }
         Log(logger, LogLevel.Trace, message, args);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ExLogDebug(this ILogger logger, string message, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(message);
 
         if (args is null || args.Length == 0)
-        {
-            LogNoArgs(logger, LogLevel.Debug, message);
-            return;
-        }
-
+        { LogNoArgs(logger, LogLevel.Debug, message); return; }
         Log(logger, LogLevel.Debug, message, args);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ExLogInformation(this ILogger logger, string message, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(message);
 
         if (args is null || args.Length == 0)
-        {
-            LogNoArgs(logger, LogLevel.Information, message);
-            return;
-        }
-
+        { LogNoArgs(logger, LogLevel.Information, message); return; }
         Log(logger, LogLevel.Information, message, args);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ExLogWarning(this ILogger logger, string message, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(message);
 
         if (args is null || args.Length == 0)
-        {
-            LogNoArgs(logger, LogLevel.Warning, message);
-            return;
-        }
-
+        { LogNoArgs(logger, LogLevel.Warning, message); return; }
         Log(logger, LogLevel.Warning, message, args);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ExLogError(this ILogger logger, string message, Exception exception, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -328,30 +313,22 @@ public static class ExLogger
         ArgumentNullException.ThrowIfNull(exception);
 
         if (args is null || args.Length == 0)
-        {
-            LogNoArgs(logger, LogLevel.Error, message, exception);
-            return;
-        }
-
+        { LogNoArgs(logger, LogLevel.Error, message, exception); return; }
         Log(logger, LogLevel.Error, message, exception, args);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ExLogError(this ILogger logger, string message, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(message);
 
         if (args is null || args.Length == 0)
-        {
-            LogNoArgs(logger, LogLevel.Error, message);
-            return;
-        }
-
+        { LogNoArgs(logger, LogLevel.Error, message); return; }
         Log(logger, LogLevel.Error, message, args);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ExLogCritical(this ILogger logger, string message, Exception exception, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -359,33 +336,26 @@ public static class ExLogger
         ArgumentNullException.ThrowIfNull(exception);
 
         if (args is null || args.Length == 0)
-        {
-            LogNoArgs(logger, LogLevel.Critical, message, exception);
-            return;
-        }
-
+        { LogNoArgs(logger, LogLevel.Critical, message, exception); return; }
         Log(logger, LogLevel.Critical, message, exception, args);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ExLogCritical(this ILogger logger, string message, params object[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(message);
 
         if (args is null || args.Length == 0)
-        {
-            LogNoArgs(logger, LogLevel.Critical, message);
-            return;
-        }
-
+        { LogNoArgs(logger, LogLevel.Critical, message); return; }
         Log(logger, LogLevel.Critical, message, args);
     }
 
-    #endregion Convenience Methods
+    #endregion
 
     #region Exception Logging
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ExLogErrorException(this ILogger logger, Exception ex, string title = "System Error", bool moreDetailsEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -397,9 +367,10 @@ public static class ExLogger
         }
 
         var msg = _exceptionFormatter(ex, title, moreDetailsEnabled);
-        LogNoArgs(logger, LogLevel.Error, msg, ex);
+        LogNoArgs(logger, LogLevel.Error, msg, null);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ExLogCriticalException(this ILogger logger, Exception ex, string title = "Critical System Error", bool moreDetailsEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -411,9 +382,10 @@ public static class ExLogger
         }
 
         var msg = _exceptionFormatter(ex, title, moreDetailsEnabled);
-        LogNoArgs(logger, LogLevel.Critical, msg, ex);
+        LogNoArgs(logger, LogLevel.Critical, msg, null);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static string FormatExceptionMessageInternal(Exception ex, string title, bool moreDetailsEnabled)
     {
         var sb = _sbPool.Get();
@@ -423,12 +395,12 @@ public static class ExLogger
             _ = sb.EnsureCapacity(1024);
 
             _ = sb.Append("Timestamp      : ").AppendLine(_cachedUtc)
-              .Append("Title          : ").AppendLine(title ?? "N/A")
-              .Append("Exception Type : ").AppendLine(ex.GetType().FullName)
-              .Append("Message        : ").AppendLine(ex.Message?.Trim() ?? "N/A")
-              .Append("HResult        : ").Append(ex.HResult).AppendLine()
-              .Append("Source         : ").AppendLine(ex.Source ?? "N/A")
-              .Append("Target Site    : ").AppendLine(ex.TargetSite?.Name ?? "N/A");
+                .Append("Title          : ").AppendLine(title ?? "N/A")
+                .Append("Exception Type : ").AppendLine(ex.GetType().FullName)
+                .Append("Message        : ").AppendLine(ex.Message?.Trim() ?? "N/A")
+                .Append("HResult        : ").Append(ex.HResult).AppendLine()
+                .Append("Source         : ").AppendLine(ex.Source ?? "N/A")
+                .Append("Target Site    : ").AppendLine(ex.TargetSite?.Name ?? "N/A");
 
             if (moreDetailsEnabled)
             {
@@ -453,6 +425,7 @@ public static class ExLogger
         }
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void AppendInnerExceptionDetails(StringBuilder sb, Exception inner, int depth, int maxDepth = 5)
     {
         if (inner is null || depth > maxDepth)
@@ -461,18 +434,16 @@ public static class ExLogger
         }
 
         var indent = new string('>', depth);
-
         _ = sb.Append(indent).Append(" Exception Type : ").AppendLine(inner.GetType().FullName)
-          .Append(indent).Append(" Message        : ").AppendLine(inner.Message?.Trim() ?? "N/A")
-          .Append(indent).Append(" HResult        : ").Append(inner.HResult).AppendLine()
-          .Append(indent).Append(" Source         : ").AppendLine(inner.Source ?? "N/A")
-          .Append(indent).Append(" Target Site    : ").AppendLine(inner.TargetSite?.Name ?? "N/A");
+            .Append(indent).Append(" Message        : ").AppendLine(inner.Message?.Trim() ?? "N/A")
+            .Append(indent).Append(" HResult        : ").Append(inner.HResult).AppendLine()
+            .Append(indent).Append(" Source         : ").AppendLine(inner.Source ?? "N/A")
+            .Append(indent).Append(" Target Site    : ").AppendLine(inner.TargetSite?.Name ?? "N/A");
 
         var st = inner.StackTrace;
         if (!string.IsNullOrWhiteSpace(st))
         {
-            _ = sb.Append(indent).AppendLine(" Stack Trace    :")
-              .AppendLine(st.Trim());
+            _ = sb.Append(indent).AppendLine(" Stack Trace    :").AppendLine(st.Trim());
         }
 
         if (inner is AggregateException agg && agg.InnerExceptions.Count > 0)
@@ -490,10 +461,11 @@ public static class ExLogger
         }
     }
 
-    #endregion Exception Logging
+    #endregion
 
     #region Log Scope Helper
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static IDisposable ExBeginScope(this ILogger logger, string key, object value)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -504,10 +476,10 @@ public static class ExLogger
         }
 
         var scope = new SingleScope(key, value);
-
         return logger.BeginScope(scope) ?? new DisposableScope(scope);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static IDisposable ExBeginScope(this ILogger logger, IDictionary<string, object> context)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -546,30 +518,35 @@ public static class ExLogger
     {
         private readonly KeyValuePair<string, object> _pair;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public SingleScope(string key, object value) =>
             _pair = new KeyValuePair<string, object>(key, value ?? "N/A");
 
         public int Count => 1;
 
-        public KeyValuePair<string, object> this[int index] =>
-            index == 0
+        public KeyValuePair<string, object> this[int index]
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            get => index == 0
                 ? _pair
-                : throw new ArgumentOutOfRangeException(nameof(index), index, "Index must be 0 for this collection.");
+                : throw new ArgumentOutOfRangeException(nameof(index));
+        }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public Enumerator GetEnumerator() => new(_pair);
 
         IEnumerator<KeyValuePair<string, object>> IEnumerable<KeyValuePair<string, object>>.GetEnumerator() => GetEnumerator();
-
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public override string ToString() => $"{_pair.Key}={_pair.Value}";
 
         public struct Enumerator : IEnumerator<KeyValuePair<string, object>>
         {
             private bool _moved;
-
             public Enumerator(KeyValuePair<string, object> value) => (Current, _moved) = (value, false);
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool MoveNext()
             {
                 if (_moved)
@@ -584,10 +561,11 @@ public static class ExLogger
             public KeyValuePair<string, object> Current { get; }
             readonly object IEnumerator.Current => Current;
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void Reset() => _moved = false;
 
-            public readonly void Dispose()
-            { }
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public readonly void Dispose() { }
         }
     }
 
@@ -595,15 +573,15 @@ public static class ExLogger
     {
         private readonly List<KeyValuePair<string, object>> _items;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public ScopeWrapper(List<KeyValuePair<string, object>> items) => _items = items;
 
         public int Count => _items.Count;
         public KeyValuePair<string, object> this[int index] => _items[index];
-
         public IEnumerator<KeyValuePair<string, object>> GetEnumerator() => _items.GetEnumerator();
-
         IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public override string ToString()
         {
             if (_items.Count == 0)
@@ -630,15 +608,16 @@ public static class ExLogger
     {
         private readonly KeyValuePair<string, object>[] _items;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public SmallScopeWrapper(KeyValuePair<string, object>[] items) => _items = items;
 
         public int Count => _items.Length;
         public KeyValuePair<string, object> this[int index] => _items[index];
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public Enumerator GetEnumerator() => new(_items);
 
         IEnumerator<KeyValuePair<string, object>> IEnumerable<KeyValuePair<string, object>>.GetEnumerator() => GetEnumerator();
-
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         public struct Enumerator : IEnumerator<KeyValuePair<string, object>>
@@ -646,20 +625,23 @@ public static class ExLogger
             private readonly KeyValuePair<string, object>[] _arr;
             private int _index;
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Enumerator(KeyValuePair<string, object>[] arr) => (_arr, _index) = (arr, -1);
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool MoveNext() => ++_index < _arr.Length;
 
             public readonly KeyValuePair<string, object> Current => _arr[_index];
-
             readonly object IEnumerator.Current => _arr[_index];
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void Reset() => _index = -1;
 
-            public readonly void Dispose()
-            { }
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public readonly void Dispose() { }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public override string ToString()
         {
             if (_items.Length == 0)
@@ -686,44 +668,41 @@ public static class ExLogger
     {
         private readonly object _state;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public DisposableScope(object state) => _state = state;
 
-        public void Dispose()
-        { }
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public void Dispose() { }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public override string ToString() => _state.ToString() ?? string.Empty;
     }
 
-    #endregion Log Scope Helper
+    #endregion
 
     #region Extensibility Hooks (Async/Batch Ready)
 
     public static Func<LogLevel, string, Exception, bool> AsyncSinkFilter { get; private set; } = static (_, _, _) => true;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void UseAsyncSinkProvider(Func<LogLevel, string, Exception, bool> filter)
         => AsyncSinkFilter = filter ?? AsyncSinkFilter;
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static async Task FlushAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             await Task.Yield();
         }
-        catch (OperationCanceledException)
-        {
-            // Graceful exit for cooperative cancellation
-        }
-        catch (ObjectDisposedException)
-        {
-            // Future async sink might be disposed already
-        }
-        catch (Exception ex)
+        catch (OperationCanceledException) { /* Exception intentionally ignored; no corrective action required. */ }
+        catch (ObjectDisposedException) { /* Exception intentionally ignored; no corrective action required. */ }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
             Debug.WriteLine($"ExLogger.FlushAsync encountered error: {ex}");
         }
     }
 
-    #endregion Extensibility Hooks (Async/Batch Ready)
+    #endregion
 }
