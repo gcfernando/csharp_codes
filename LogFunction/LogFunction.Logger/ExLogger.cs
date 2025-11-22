@@ -15,6 +15,7 @@ namespace LogFunction.Logger;
 
 public static class ExLogger
 {
+    private const string _message = "{Message}";
     static ExLogger()
     {
         AppDomain.CurrentDomain.ProcessExit += static (_, __) => SafeShutdown();
@@ -24,22 +25,22 @@ public static class ExLogger
     #region Predefined Delegates for Performance
 
     private static readonly Action<ILogger, string, Exception> _trace =
-        LoggerMessage.Define<string>(LogLevel.Trace, new EventId(0, "TraceEvent"), "{Message}");
+        LoggerMessage.Define<string>(LogLevel.Trace, new EventId(0, "TraceEvent"), _message);
 
     private static readonly Action<ILogger, string, Exception> _debug =
-        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "DebugEvent"), "{Message}");
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "DebugEvent"), _message);
 
     private static readonly Action<ILogger, string, Exception> _info =
-        LoggerMessage.Define<string>(LogLevel.Information, new EventId(2, "InformationEvent"), "{Message}");
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(2, "InformationEvent"), _message);
 
     private static readonly Action<ILogger, string, Exception> _warn =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(3, "WarningEvent"), "{Message}");
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(3, "WarningEvent"), _message);
 
     private static readonly Action<ILogger, string, Exception> _error =
-        LoggerMessage.Define<string>(LogLevel.Error, new EventId(4, "ErrorEvent"), "{Message}");
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(4, "ErrorEvent"), _message);
 
     private static readonly Action<ILogger, string, Exception> _critical =
-        LoggerMessage.Define<string>(LogLevel.Critical, new EventId(5, "CriticalEvent"), "{Message}");
+        LoggerMessage.Define<string>(LogLevel.Critical, new EventId(5, "CriticalEvent"), _message);
 
     private static readonly Action<ILogger, string, Exception> _noop = static (_, __, ___) => { };
 
