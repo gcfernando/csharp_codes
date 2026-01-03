@@ -60,3 +60,10 @@
 /LogFunction/LogFunction.Logger/obj
 /LogFunction/Logger/obj
 /LogFunction/.vs/ProjectEvaluation
+/SQLWrites/.vs
+/SQLWrites/Common/bin/Debug/net10.0
+/SQLWrites/Common/obj
+/SQLWrites/UseBulk/bin/Debug/net10.0
+/SQLWrites/UseBulk/obj
+/SQLWrites/UseNormal/bin/Debug/net10.0
+/SQLWrites/UseNormal/obj
