@@ -50,7 +50,7 @@
             this.ambiance_ThemeSpectrum.Sizable = false;
             this.ambiance_ThemeSpectrum.Size = new System.Drawing.Size(1100, 378);
             this.ambiance_ThemeSpectrum.SmartBounds = true;
-            this.ambiance_ThemeSpectrum.StartPosition = System.Windows.Forms.FormStartPosition.WindowsDefaultLocation;
+            this.ambiance_ThemeSpectrum.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.ambiance_ThemeSpectrum.TabIndex = 0;
             this.ambiance_ThemeSpectrum.Text = "Audio Spectrum Analyzer";
             // 
@@ -59,12 +59,12 @@
             this.ambiance_LabelDeveloper.AutoSize = true;
             this.ambiance_LabelDeveloper.BackColor = System.Drawing.Color.Transparent;
             this.ambiance_LabelDeveloper.Font = new System.Drawing.Font("Consolas", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.ambiance_LabelDeveloper.ForeColor = System.Drawing.Color.Silver;
-            this.ambiance_LabelDeveloper.Location = new System.Drawing.Point(878, 20);
+            this.ambiance_LabelDeveloper.ForeColor = System.Drawing.Color.DimGray;
+            this.ambiance_LabelDeveloper.Location = new System.Drawing.Point(857, 20);
             this.ambiance_LabelDeveloper.Name = "ambiance_LabelDeveloper";
-            this.ambiance_LabelDeveloper.Size = new System.Drawing.Size(210, 15);
+            this.ambiance_LabelDeveloper.Size = new System.Drawing.Size(231, 15);
             this.ambiance_LabelDeveloper.TabIndex = 5;
-            this.ambiance_LabelDeveloper.Text = "Developer ::. Gehan Fernando.";
+            this.ambiance_LabelDeveloper.Text = "Developed by ::. Gehan Fernando.";
             // 
             // ambiance_ControlBox
             // 
@@ -91,6 +91,7 @@
             this.MaximizeBox = false;
             this.MinimumSize = new System.Drawing.Size(261, 65);
             this.Name = "FormAudioSpectrum";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Audio Spectrum Analyzer";
             this.TransparencyKey = System.Drawing.Color.Fuchsia;
             this.Load += new System.EventHandler(this.FormAudioSpectrum_Load);

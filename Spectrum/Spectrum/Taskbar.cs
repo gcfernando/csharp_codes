@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 
 namespace Spectrum
 {
+    // Developed by Gehan Fernando
+
     public static class Taskbar
     {
         public enum TaskbarStates
@@ -34,7 +36,7 @@ namespace Spectrum
             void MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fFullscreen);
 
             [PreserveSig]
-            void SetProgressValue(IntPtr hwnd, UInt64 ullCompleted, UInt64 ullTotal);
+            void SetProgressValue(IntPtr hwnd, ulong ullCompleted, ulong ullTotal);
             [PreserveSig]
             void SetProgressState(IntPtr hwnd, TaskbarStates state);
         }
@@ -44,20 +46,24 @@ namespace Spectrum
         [ComImportAttribute()]
         private class TaskbarInstance { }
 
-        private static ITaskbarList3 taskbarInstance = (ITaskbarList3)new TaskbarInstance();
+        private static readonly ITaskbarList3 taskbarInstance = (ITaskbarList3)new TaskbarInstance();
 
-        private static bool taskbarSupported = Environment.OSVersion.Version >= new Version(6, 1);
+        private static readonly bool taskbarSupported = Environment.OSVersion.Version >= new Version(6, 1);
 
         public static void SetState(IntPtr windowHandle, TaskbarStates taskbarState)
         {
             if (taskbarSupported)
+            {
                 taskbarInstance.SetProgressState(windowHandle, taskbarState);
+            }
         }
 
         public static void SetValue(IntPtr windowHandle, double progressValue, double progressMax)
         {
             if (taskbarSupported)
+            {
                 taskbarInstance.SetProgressValue(windowHandle, (ulong)progressValue, (ulong)progressMax);
+            }
         }
     }
 }

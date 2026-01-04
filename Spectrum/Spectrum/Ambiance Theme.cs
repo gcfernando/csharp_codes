@@ -7,15 +7,15 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-#endregion
+#endregion Imports
 #region RoundRectangle
 
-static class RoundRectangle
+internal static class RoundRectangle
 {
     public static GraphicsPath RoundRect(Rectangle Rectangle, int Curve)
     {
-        GraphicsPath P = new GraphicsPath();
-        int ArcRectangleWidth = Curve * 2;
+        var P = new GraphicsPath();
+        var ArcRectangleWidth = Curve * 2;
         P.AddArc(new Rectangle(Rectangle.X, Rectangle.Y, ArcRectangleWidth, ArcRectangleWidth), -180, 90);
         P.AddArc(new Rectangle(Rectangle.Width - ArcRectangleWidth + Rectangle.X, Rectangle.Y, ArcRectangleWidth, ArcRectangleWidth), -90, 90);
         P.AddArc(new Rectangle(Rectangle.Width - ArcRectangleWidth + Rectangle.X, Rectangle.Height - ArcRectangleWidth + Rectangle.Y, ArcRectangleWidth, ArcRectangleWidth), 0, 90);
@@ -25,9 +25,9 @@ static class RoundRectangle
     }
     public static GraphicsPath RoundRect(int X, int Y, int Width, int Height, int Curve)
     {
-        Rectangle Rectangle = new Rectangle(X, Y, Width, Height);
-        GraphicsPath P = new GraphicsPath();
-        int ArcRectangleWidth = Curve * 2;
+        var Rectangle = new Rectangle(X, Y, Width, Height);
+        var P = new GraphicsPath();
+        var ArcRectangleWidth = Curve * 2;
         P.AddArc(new Rectangle(Rectangle.X, Rectangle.Y, ArcRectangleWidth, ArcRectangleWidth), -180, 90);
         P.AddArc(new Rectangle(Rectangle.Width - ArcRectangleWidth + Rectangle.X, Rectangle.Y, ArcRectangleWidth, ArcRectangleWidth), -90, 90);
         P.AddArc(new Rectangle(Rectangle.Width - ArcRectangleWidth + Rectangle.X, Rectangle.Height - ArcRectangleWidth + Rectangle.Y, ArcRectangleWidth, ArcRectangleWidth), 0, 90);
@@ -37,8 +37,8 @@ static class RoundRectangle
     }
     public static GraphicsPath RoundedTopRect(Rectangle Rectangle, int Curve)
     {
-        GraphicsPath P = new GraphicsPath();
-        int ArcRectangleWidth = Curve * 2;
+        var P = new GraphicsPath();
+        var ArcRectangleWidth = Curve * 2;
         P.AddArc(new Rectangle(Rectangle.X, Rectangle.Y, ArcRectangleWidth, ArcRectangleWidth), -180, 90);
         P.AddArc(new Rectangle(Rectangle.Width - ArcRectangleWidth + Rectangle.X, Rectangle.Y, ArcRectangleWidth, ArcRectangleWidth), -90, 90);
         P.AddLine(new Point(Rectangle.X + Rectangle.Width, Rectangle.Y + ArcRectangleWidth), new Point(Rectangle.X + Rectangle.Width, Rectangle.Y + Rectangle.Height - 1));
@@ -47,23 +47,12 @@ static class RoundRectangle
     }
 }
 
-#endregion
-
-//|------DO-NOT-REMOVE------|
-//
-// Creator: HazelDev
-// Site   : HazelDev.co.nr
-// Created: 20.Aug.2014
-// Changed: 8.Sep.2014
-// Version: 1.0.0
-//
-//|------DO-NOT-REMOVE------|
-
-#region  ThemeContainer
+#endregion RoundRectangle
+#region ThemeContainer
 
 public class Ambiance_ThemeContainer : ContainerControl
 {
-    #region  Enums
+    #region Enums
 
     public enum MouseState
     {
@@ -73,18 +62,18 @@ public class Ambiance_ThemeContainer : ContainerControl
         Block = 3
     }
 
-    #endregion
-    #region  Variables
+    #endregion Enums
+    #region Variables
 
     private Rectangle HeaderRect;
     protected MouseState State;
-    private int MoveHeight;
+    private readonly int MoveHeight;
     private Point MouseP = new Point(0, 0);
     private bool Cap = false;
     private bool HasShown;
 
-    #endregion
-    #region  Properties
+    #endregion Variables
+    #region Properties
 
     public bool Sizable { get; set; } = true;
 
@@ -93,10 +82,7 @@ public class Ambiance_ThemeContainer : ContainerControl
     private bool _RoundCorners = true;
     public bool RoundCorners
     {
-        get
-        {
-            return _RoundCorners;
-        }
+        get => _RoundCorners;
         set
         {
             _RoundCorners = value;
@@ -106,25 +92,12 @@ public class Ambiance_ThemeContainer : ContainerControl
 
     protected bool IsParentForm { get; private set; }
 
-    protected bool IsParentMdi
-    {
-        get
-        {
-            if (Parent == null)
-            {
-                return false;
-            }
-            return Parent.Parent != null;
-        }
-    }
+    protected bool IsParentMdi => Parent != null && Parent.Parent != null;
 
     private bool _ControlMode;
     protected bool ControlMode
     {
-        get
-        {
-            return _ControlMode;
-        }
+        get => _ControlMode;
         set
         {
             _ControlMode = value;
@@ -135,17 +108,7 @@ public class Ambiance_ThemeContainer : ContainerControl
     private FormStartPosition _StartPosition = FormStartPosition.CenterScreen;
     public FormStartPosition StartPosition
     {
-        get
-        {
-            if (IsParentForm && !_ControlMode)
-            {
-                return ParentForm.StartPosition;
-            }
-            else
-            {
-                return _StartPosition;
-            }
-        }
+        get => IsParentForm && !_ControlMode ? ParentForm.StartPosition : _StartPosition;
         set
         {
             _StartPosition = value;
@@ -157,8 +120,8 @@ public class Ambiance_ThemeContainer : ContainerControl
         }
     }
 
-    #endregion
-    #region  EventArgs
+    #endregion Properties
+    #region EventArgs
 
     protected sealed override void OnParentChanged(EventArgs e)
     {
@@ -206,7 +169,7 @@ public class Ambiance_ThemeContainer : ContainerControl
         {
             SetState(MouseState.Down);
         }
-        if (!(IsParentForm && ParentForm.WindowState == FormWindowState.Maximized || _ControlMode))
+        if (!((IsParentForm && ParentForm.WindowState == FormWindowState.Maximized) || _ControlMode))
         {
             if (HeaderRect.Contains(e.Location))
             {
@@ -241,7 +204,7 @@ public class Ambiance_ThemeContainer : ContainerControl
         }
         if (Cap)
         {
-            Parent.Location = (System.Drawing.Point)((object)(System.Convert.ToDouble(MousePosition) - System.Convert.ToDouble(MouseP)));
+            Parent.Location = (System.Drawing.Point)(object)(System.Convert.ToDouble(MousePosition) - System.Convert.ToDouble(MouseP));
         }
     }
 
@@ -251,10 +214,7 @@ public class Ambiance_ThemeContainer : ContainerControl
         ParentForm.Text = Text;
     }
 
-    protected override void OnPaintBackground(PaintEventArgs e)
-    {
-        base.OnPaintBackground(e);
-    }
+    protected override void OnPaintBackground(PaintEventArgs e) => base.OnPaintBackground(e);
 
     protected override void OnTextChanged(System.EventArgs e)
     {
@@ -271,15 +231,15 @@ public class Ambiance_ThemeContainer : ContainerControl
 
         if (_StartPosition == FormStartPosition.CenterParent || _StartPosition == FormStartPosition.CenterScreen)
         {
-            Rectangle SB = Screen.PrimaryScreen.Bounds;
-            Rectangle CB = ParentForm.Bounds;
-            ParentForm.Location = new Point(SB.Width / 2 - CB.Width / 2, SB.Height / 2 - CB.Width / 2);
+            var SB = Screen.PrimaryScreen.Bounds;
+            var CB = ParentForm.Bounds;
+            ParentForm.Location = new Point((SB.Width / 2) - (CB.Width / 2), (SB.Height / 2) - (CB.Width / 2));
         }
         HasShown = true;
     }
 
-    #endregion
-    #region  Mouse & Size
+    #endregion EventArgs
+    #region Mouse & Size
 
     private void SetState(MouseState current)
     {
@@ -320,19 +280,7 @@ public class Ambiance_ThemeContainer : ContainerControl
         {
             return 1;
         }
-        if (B2x)
-        {
-            return 2;
-        }
-        if (B3)
-        {
-            return 3;
-        }
-        if (B4)
-        {
-            return 6;
-        }
-        return 0;
+        return B2x ? 2 : B3 ? 3 : B4 ? 6 : 0;
     }
 
     private int Current;
@@ -363,11 +311,11 @@ public class Ambiance_ThemeContainer : ContainerControl
         }
     }
 
-    private Message[] Messages = new Message[9];
+    private readonly Message[] Messages = new Message[9];
     private void InitializeMessages()
     {
         Messages[0] = Message.Create(Parent.Handle, 161, new IntPtr(2), IntPtr.Zero);
-        for (int I = 1; I <= 8; I++)
+        for (var I = 1; I <= 8; I++)
         {
             Messages[I] = Message.Create(Parent.Handle, 161, new IntPtr(I + 9), IntPtr.Zero);
         }
@@ -384,8 +332,8 @@ public class Ambiance_ThemeContainer : ContainerControl
             Parent.Height = bounds.Height;
         }
 
-        int X = Parent.Location.X;
-        int Y = Parent.Location.Y;
+        var X = Parent.Location.X;
+        var Y = Parent.Location.Y;
 
         if (X < bounds.X)
         {
@@ -396,8 +344,8 @@ public class Ambiance_ThemeContainer : ContainerControl
             Y = bounds.Y;
         }
 
-        int Width = bounds.X + bounds.Width;
-        int Height = bounds.Y + bounds.Height;
+        var Width = bounds.X + bounds.Width;
+        var Height = bounds.Y + bounds.Height;
 
         if (X + Parent.Width > Width)
         {
@@ -437,16 +385,13 @@ public class Ambiance_ThemeContainer : ContainerControl
         }
     }
 
-    #endregion
+    #endregion Mouse & Size
 
-    protected override void CreateHandle()
-    {
-        base.CreateHandle();
-    }
+    protected override void CreateHandle() => base.CreateHandle();
 
     public Ambiance_ThemeContainer()
     {
-        SetStyle((ControlStyles)(139270), true);
+        SetStyle((ControlStyles)139270, true);
         BackColor = Color.Black;// Color.FromArgb(244, 241, 243);
         Padding = new Padding(20, 56, 20, 16);
         DoubleBuffered = true;
@@ -458,13 +403,13 @@ public class Ambiance_ThemeContainer : ContainerControl
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        Graphics G = e.Graphics;
+        var G = e.Graphics;
         //G.Clear(Color.FromArgb(69, 68, 63));
         G.Clear(Color.OrangeRed);
 
         G.DrawRectangle(new Pen(Color.FromArgb(38, 38, 38)), new Rectangle(0, 0, Width - 1, Height - 1));
-        // Use [Color.FromArgb(87, 86, 81), Color.FromArgb(60, 59, 55)] for a darker taste
-        // And replace each (60, 59, 55) with (69, 68, 63)
+        // Use [Color.FromArgb(87, 86, 81), Color.FromArgb(60, 59, 55)] for a darker taste And
+        // replace each (60, 59, 55) with (69, 68, 63)
         G.FillRectangle(new LinearGradientBrush(new Point(0, 0), new Point(0, 36), Color.FromArgb(87, 85, 77), Color.FromArgb(69, 68, 63)), new Rectangle(1, 1, Width - 2, 36));
         G.FillRectangle(new LinearGradientBrush(new Point(0, 0), new Point(0, Height), Color.FromArgb(69, 68, 63), Color.FromArgb(69, 68, 63)), new Rectangle(1, 36, Width - 2, Height - 46));
 
@@ -543,12 +488,12 @@ public class Ambiance_ThemeContainer : ContainerControl
     }
 }
 
-#endregion
-#region  ControlBox
+#endregion ThemeContainer
+#region ControlBox
 
 public class Ambiance_ControlBox : Control
 {
-    #region  Enums
+    #region Enums
 
     public enum MouseState
     {
@@ -557,13 +502,13 @@ public class Ambiance_ControlBox : Control
         Down = 2
     }
 
-    #endregion
-    #region  MouseStates
-    MouseState State = MouseState.None;
-    int X;
-    Rectangle CloseBtn = new Rectangle(3, 2, 17, 17);
-    Rectangle MinBtn = new Rectangle(23, 2, 17, 17);
-    Rectangle MaxBtn = new Rectangle(43, 2, 17, 17);
+    #endregion Enums
+    #region MouseStates
+    private MouseState State = MouseState.None;
+    private int X;
+    private Rectangle CloseBtn = new Rectangle(3, 2, 17, 17);
+    private Rectangle MinBtn = new Rectangle(23, 2, 17, 17);
+    private Rectangle MaxBtn = new Rectangle(43, 2, 17, 17);
 
     protected override void OnMouseDown(System.Windows.Forms.MouseEventArgs e)
     {
@@ -620,32 +565,22 @@ public class Ambiance_ControlBox : Control
         X = e.Location.X;
         Invalidate();
     }
-    #endregion
-    #region  Properties
+    #endregion MouseStates
+    #region Properties
 
-    bool _EnableMaximize = true;
+    private bool _EnableMaximize = true;
     public bool EnableMaximize
     {
-        get
-        {
-            return _EnableMaximize;
-        }
+        get => _EnableMaximize;
         set
         {
             _EnableMaximize = value;
-            if (_EnableMaximize == true)
-            {
-                this.Size = new Size(64, 22);
-            }
-            else
-            {
-                this.Size = new Size(44, 22);
-            }
+            this.Size = _EnableMaximize == true ? new Size(64, 22) : new Size(44, 22);
             Invalidate();
         }
     }
 
-    #endregion
+    #endregion Properties
 
     public Ambiance_ControlBox()
     {
@@ -659,14 +594,7 @@ public class Ambiance_ControlBox : Control
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        if (_EnableMaximize == true)
-        {
-            this.Size = new Size(64, 22);
-        }
-        else
-        {
-            this.Size = new Size(44, 22);
-        }
+        this.Size = _EnableMaximize == true ? new Size(64, 22) : new Size(44, 22);
     }
 
     protected override void OnCreateControl()
@@ -678,25 +606,25 @@ public class Ambiance_ControlBox : Control
 
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
-        Bitmap B = new Bitmap(Width, Height);
-        Graphics G = Graphics.FromImage(B);
+        var B = new Bitmap(Width, Height);
+        var G = Graphics.FromImage(B);
 
         base.OnPaint(e);
         G.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-        LinearGradientBrush LGBClose = new LinearGradientBrush(CloseBtn, Color.FromArgb(242, 132, 99), Color.FromArgb(224, 82, 33), 90);
+        var LGBClose = new LinearGradientBrush(CloseBtn, Color.FromArgb(242, 132, 99), Color.FromArgb(224, 82, 33), 90);
         G.FillEllipse(LGBClose, CloseBtn);
         G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), CloseBtn);
         G.DrawString("r", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle((int)6.5, 8, 0, 0));
 
-        LinearGradientBrush LGBMinimize = new LinearGradientBrush(MinBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
+        var LGBMinimize = new LinearGradientBrush(MinBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
         G.FillEllipse(LGBMinimize, MinBtn);
         G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MinBtn);
         G.DrawString("0", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(26, (int)4.4, 0, 0));
 
         if (_EnableMaximize == true)
         {
-            LinearGradientBrush LGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
+            var LGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
             G.FillEllipse(LGBMaximize, MaxBtn);
             G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MaxBtn);
             G.DrawString("1", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(46, 7, 0, 0));
@@ -705,19 +633,19 @@ public class Ambiance_ControlBox : Control
         switch (State)
         {
             case MouseState.None:
-                LinearGradientBrush xLGBClose_1 = new LinearGradientBrush(CloseBtn, Color.FromArgb(242, 132, 99), Color.FromArgb(224, 82, 33), 90);
+                var xLGBClose_1 = new LinearGradientBrush(CloseBtn, Color.FromArgb(242, 132, 99), Color.FromArgb(224, 82, 33), 90);
                 G.FillEllipse(xLGBClose_1, CloseBtn);
                 G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), CloseBtn);
                 G.DrawString("r", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle((int)6.5, 8, 0, 0));
 
-                LinearGradientBrush xLGBMinimize_1 = new LinearGradientBrush(MinBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
+                var xLGBMinimize_1 = new LinearGradientBrush(MinBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
                 G.FillEllipse(xLGBMinimize_1, MinBtn);
                 G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MinBtn);
                 G.DrawString("0", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(26, (int)4.4, 0, 0));
 
                 if (_EnableMaximize == true)
                 {
-                    LinearGradientBrush xLGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
+                    var xLGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
                     G.FillEllipse(xLGBMaximize, MaxBtn);
                     G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MaxBtn);
                     G.DrawString("1", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(46, 7, 0, 0));
@@ -726,14 +654,14 @@ public class Ambiance_ControlBox : Control
             case MouseState.Over:
                 if (X > 3 && X < 20)
                 {
-                    LinearGradientBrush xLGBClose = new LinearGradientBrush(CloseBtn, Color.FromArgb(248, 152, 124), Color.FromArgb(231, 92, 45), 90);
+                    var xLGBClose = new LinearGradientBrush(CloseBtn, Color.FromArgb(248, 152, 124), Color.FromArgb(231, 92, 45), 90);
                     G.FillEllipse(xLGBClose, CloseBtn);
                     G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), CloseBtn);
                     G.DrawString("r", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle((int)6.5, 8, 0, 0));
                 }
                 else if (X > 23 && X < 40)
                 {
-                    LinearGradientBrush xLGBMinimize = new LinearGradientBrush(MinBtn, Color.FromArgb(196, 196, 196), Color.FromArgb(173, 173, 173), 90);
+                    var xLGBMinimize = new LinearGradientBrush(MinBtn, Color.FromArgb(196, 196, 196), Color.FromArgb(173, 173, 173), 90);
                     G.FillEllipse(xLGBMinimize, MinBtn);
                     G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MinBtn);
                     G.DrawString("0", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(26, (int)4.4, 0, 0));
@@ -742,7 +670,7 @@ public class Ambiance_ControlBox : Control
                 {
                     if (_EnableMaximize == true)
                     {
-                        LinearGradientBrush xLGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(196, 196, 196), Color.FromArgb(173, 173, 173), 90);
+                        var xLGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(196, 196, 196), Color.FromArgb(173, 173, 173), 90);
                         G.FillEllipse(xLGBMaximize, MaxBtn);
                         G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MaxBtn);
                         G.DrawString("1", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(46, 7, 0, 0));
@@ -751,16 +679,16 @@ public class Ambiance_ControlBox : Control
                 break;
         }
 
-        e.Graphics.DrawImage((Image)(B.Clone()), 0, 0);
+        e.Graphics.DrawImage((Image)B.Clone(), 0, 0);
         G.Dispose();
         B.Dispose();
     }
 }
 
-#endregion
+#endregion ControlBox
 #region Button 1
 
-class Ambiance_Button_1 : Control
+internal class Ambiance_Button_1 : Control
 {
     #region Variables
 
@@ -770,7 +698,7 @@ class Ambiance_Button_1 : Control
     private LinearGradientBrush PressedGB;
     private LinearGradientBrush PressedContourGB;
     private Rectangle R1;
-    private Pen P1;
+    private readonly Pen P1;
     private Pen P3;
     private Image _Image;
     private Size _ImageSize;
@@ -778,12 +706,12 @@ class Ambiance_Button_1 : Control
     private Color _TextColor = Color.FromArgb(150, 150, 150);
     private ContentAlignment _ImageAlign = ContentAlignment.MiddleLeft;
 
-    #endregion
+    #endregion Variables
     #region Image Designer
 
     private static PointF ImageLocation(StringFormat SF, SizeF Area, SizeF ImageArea)
     {
-        PointF MyPoint = default(PointF);
+        var MyPoint = default(PointF);
         switch (SF.Alignment)
         {
             case StringAlignment.Center:
@@ -815,7 +743,7 @@ class Ambiance_Button_1 : Control
 
     private StringFormat GetStringFormat(ContentAlignment _ContentAlignment)
     {
-        StringFormat SF = new StringFormat();
+        var SF = new StringFormat();
         switch (_ContentAlignment)
         {
             case ContentAlignment.MiddleCenter:
@@ -858,36 +786,26 @@ class Ambiance_Button_1 : Control
         return SF;
     }
 
-    #endregion
+    #endregion Image Designer
     #region Properties
 
     public Image Image
     {
-        get { return _Image; }
+        get => _Image;
         set
         {
-            if (value == null)
-            {
-                _ImageSize = Size.Empty;
-            }
-            else
-            {
-                _ImageSize = value.Size;
-            }
+            _ImageSize = value == null ? Size.Empty : value.Size;
 
             _Image = value;
             Invalidate();
         }
     }
 
-    protected Size ImageSize
-    {
-        get { return _ImageSize; }
-    }
+    protected Size ImageSize => _ImageSize;
 
     public ContentAlignment ImageAlign
     {
-        get { return _ImageAlign; }
+        get => _ImageAlign;
         set
         {
             _ImageAlign = value;
@@ -897,7 +815,7 @@ class Ambiance_Button_1 : Control
 
     public StringAlignment TextAlignment
     {
-        get { return this._TextAlignment; }
+        get => this._TextAlignment;
         set
         {
             this._TextAlignment = value;
@@ -907,7 +825,7 @@ class Ambiance_Button_1 : Control
 
     public override Color ForeColor
     {
-        get { return this._TextColor; }
+        get => this._TextColor;
         set
         {
             this._TextColor = value;
@@ -915,7 +833,7 @@ class Ambiance_Button_1 : Control
         }
     }
 
-    #endregion
+    #endregion Properties
     #region EventArgs
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -927,7 +845,7 @@ class Ambiance_Button_1 : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         MouseState = 1;
-        Focus();
+        _ = Focus();
         Invalidate();
         base.OnMouseDown(e);
     }
@@ -945,7 +863,7 @@ class Ambiance_Button_1 : Control
         base.OnTextChanged(e);
     }
 
-    #endregion
+    #endregion EventArgs
 
     public Ambiance_Button_1()
     {
@@ -975,7 +893,7 @@ class Ambiance_Button_1 : Control
             P3 = new Pen(PressedContourGB);
         }
 
-        GraphicsPath MyDrawer = Shape;
+        var MyDrawer = Shape;
         MyDrawer.AddArc(0, 0, 10, 10, 180, 90);
         MyDrawer.AddArc(Width - 11, 0, 10, 10, -90, 90);
         MyDrawer.AddArc(Width - 11, Height - 11, 10, 10, 0, 90);
@@ -987,9 +905,9 @@ class Ambiance_Button_1 : Control
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        Graphics G = e.Graphics;
+        var G = e.Graphics;
         G.SmoothingMode = SmoothingMode.HighQuality;
-        PointF ipt = ImageLocation(GetStringFormat(ImageAlign), Size, ImageSize);
+        var ipt = ImageLocation(GetStringFormat(ImageAlign), Size, ImageSize);
 
         switch (MouseState)
         {
@@ -999,7 +917,7 @@ class Ambiance_Button_1 : Control
                 // Fill button body with InactiveGB color gradient
                 G.DrawPath(P1, Shape);
                 // Draw button border [InactiveGB]
-                if ((Image == null))
+                if (Image == null)
                 {
                     G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
                     {
@@ -1024,7 +942,7 @@ class Ambiance_Button_1 : Control
                 G.DrawPath(P3, Shape);
                 // Draw button border [PressedGB]
 
-                if ((Image == null))
+                if (Image == null)
                 {
                     G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
                     {
@@ -1047,10 +965,10 @@ class Ambiance_Button_1 : Control
     }
 }
 
-#endregion
+#endregion Button 1
 #region Button 2
 
-class Ambiance_Button_2 : Control
+internal class Ambiance_Button_2 : Control
 {
     #region Variables
 
@@ -1060,7 +978,7 @@ class Ambiance_Button_2 : Control
     private LinearGradientBrush PressedGB;
     private LinearGradientBrush PressedContourGB;
     private Rectangle R1;
-    private Pen P1;
+    private readonly Pen P1;
     private Pen P3;
     private Image _Image;
     private Size _ImageSize;
@@ -1068,12 +986,12 @@ class Ambiance_Button_2 : Control
     private Color _TextColor = Color.FromArgb(150, 150, 150);
     private ContentAlignment _ImageAlign = ContentAlignment.MiddleLeft;
 
-    #endregion
+    #endregion Variables
     #region Image Designer
 
     private static PointF ImageLocation(StringFormat SF, SizeF Area, SizeF ImageArea)
     {
-        PointF MyPoint = default(PointF);
+        var MyPoint = default(PointF);
         switch (SF.Alignment)
         {
             case StringAlignment.Center:
@@ -1105,7 +1023,7 @@ class Ambiance_Button_2 : Control
 
     private StringFormat GetStringFormat(ContentAlignment _ContentAlignment)
     {
-        StringFormat SF = new StringFormat();
+        var SF = new StringFormat();
         switch (_ContentAlignment)
         {
             case ContentAlignment.MiddleCenter:
@@ -1148,36 +1066,26 @@ class Ambiance_Button_2 : Control
         return SF;
     }
 
-    #endregion
+    #endregion Image Designer
     #region Properties
 
     public Image Image
     {
-        get { return _Image; }
+        get => _Image;
         set
         {
-            if (value == null)
-            {
-                _ImageSize = Size.Empty;
-            }
-            else
-            {
-                _ImageSize = value.Size;
-            }
+            _ImageSize = value == null ? Size.Empty : value.Size;
 
             _Image = value;
             Invalidate();
         }
     }
 
-    protected Size ImageSize
-    {
-        get { return _ImageSize; }
-    }
+    protected Size ImageSize => _ImageSize;
 
     public ContentAlignment ImageAlign
     {
-        get { return _ImageAlign; }
+        get => _ImageAlign;
         set
         {
             _ImageAlign = value;
@@ -1187,7 +1095,7 @@ class Ambiance_Button_2 : Control
 
     public StringAlignment TextAlignment
     {
-        get { return this._TextAlignment; }
+        get => this._TextAlignment;
         set
         {
             this._TextAlignment = value;
@@ -1197,7 +1105,7 @@ class Ambiance_Button_2 : Control
 
     public override Color ForeColor
     {
-        get { return this._TextColor; }
+        get => this._TextColor;
         set
         {
             this._TextColor = value;
@@ -1205,7 +1113,7 @@ class Ambiance_Button_2 : Control
         }
     }
 
-    #endregion
+    #endregion Properties
     #region EventArgs
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -1217,7 +1125,7 @@ class Ambiance_Button_2 : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         MouseState = 1;
-        Focus();
+        _ = Focus();
         Invalidate();
         base.OnMouseDown(e);
     }
@@ -1235,7 +1143,7 @@ class Ambiance_Button_2 : Control
         base.OnTextChanged(e);
     }
 
-    #endregion
+    #endregion EventArgs
 
     public Ambiance_Button_2()
     {
@@ -1265,7 +1173,7 @@ class Ambiance_Button_2 : Control
             P3 = new Pen(PressedContourGB);
         }
 
-        GraphicsPath MyDrawer = Shape;
+        var MyDrawer = Shape;
         MyDrawer.AddArc(0, 0, 10, 10, 180, 90);
         MyDrawer.AddArc(Width - 11, 0, 10, 10, -90, 90);
         MyDrawer.AddArc(Width - 11, Height - 11, 10, 10, 0, 90);
@@ -1277,9 +1185,9 @@ class Ambiance_Button_2 : Control
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        Graphics G = e.Graphics;
+        var G = e.Graphics;
         G.SmoothingMode = SmoothingMode.HighQuality;
-        PointF ipt = ImageLocation(GetStringFormat(ImageAlign), Size, ImageSize);
+        var ipt = ImageLocation(GetStringFormat(ImageAlign), Size, ImageSize);
 
         switch (MouseState)
         {
@@ -1289,7 +1197,7 @@ class Ambiance_Button_2 : Control
                 // Fill button body with InactiveGB color gradient
                 G.DrawPath(P1, Shape);
                 // Draw button border [InactiveGB]
-                if ((Image == null))
+                if (Image == null)
                 {
                     G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
                     {
@@ -1314,7 +1222,7 @@ class Ambiance_Button_2 : Control
                 G.DrawPath(P3, Shape);
                 // Draw button border [PressedGB]
 
-                if ((Image == null))
+                if (Image == null)
                 {
                     G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
                     {
@@ -1337,10 +1245,10 @@ class Ambiance_Button_2 : Control
     }
 }
 
-#endregion
+#endregion Button 2
 #region Label
 
-class Ambiance_Label : Label
+internal class Ambiance_Label : Label
 {
     public Ambiance_Label()
     {
@@ -1350,9 +1258,9 @@ class Ambiance_Label : Label
     }
 }
 
-#endregion
+#endregion Label
 #region Link Label
-class Ambiance_LinkLabel : LinkLabel
+internal class Ambiance_LinkLabel : LinkLabel
 {
     public Ambiance_LinkLabel()
     {
@@ -1365,10 +1273,10 @@ class Ambiance_LinkLabel : LinkLabel
     }
 }
 
-#endregion
+#endregion Link Label
 #region Header Label
 
-class Ambiance_HeaderLabel : Label
+internal class Ambiance_HeaderLabel : Label
 {
     public Ambiance_HeaderLabel()
     {
@@ -1378,7 +1286,7 @@ class Ambiance_HeaderLabel : Label
     }
 }
 
-#endregion
+#endregion Header Label
 #region Separator
 
 public class Ambiance_Separator : Control
@@ -1397,7 +1305,7 @@ public class Ambiance_Separator : Control
     }
 }
 
-#endregion
+#endregion Separator
 #region ProgressBar
 
 public class Ambiance_ProgressBar : Control
@@ -1410,7 +1318,7 @@ public class Ambiance_ProgressBar : Control
         Center
     }
 
-    #endregion
+    #endregion Enums
     #region Variables
 
     private int _Minimum;
@@ -1429,18 +1337,24 @@ public class Ambiance_ProgressBar : Control
     private LinearGradientBrush GB2;
     private int I1;
 
-    #endregion
+    #endregion Variables
     #region Properties
 
     public int Maximum
     {
-        get { return _Maximum; }
+        get => _Maximum;
         set
         {
             if (value < 1)
+            {
                 value = 1;
+            }
+
             if (value < _Value)
+            {
                 _Value = value;
+            }
+
             _Maximum = value;
             Invalidate();
         }
@@ -1448,15 +1362,20 @@ public class Ambiance_ProgressBar : Control
 
     public int Minimum
     {
-        get { return _Minimum; }
+        get => _Minimum;
         set
         {
             _Minimum = value;
 
             if (value > _Maximum)
+            {
                 _Maximum = value;
+            }
+
             if (value > _Value)
+            {
                 _Value = value;
+            }
 
             Invalidate();
         }
@@ -1464,11 +1383,14 @@ public class Ambiance_ProgressBar : Control
 
     public int Value
     {
-        get { return _Value; }
+        get => _Value;
         set
         {
             if (value > _Maximum)
+            {
                 value = Maximum;
+            }
+
             _Value = value;
             Invalidate();
         }
@@ -1476,7 +1398,7 @@ public class Ambiance_ProgressBar : Control
 
     public Alignment ValueAlignment
     {
-        get { return ALN; }
+        get => ALN;
         set
         {
             ALN = value;
@@ -1486,7 +1408,7 @@ public class Ambiance_ProgressBar : Control
 
     public bool DrawHatch
     {
-        get { return _DrawHatch; }
+        get => _DrawHatch;
         set
         {
             _DrawHatch = value;
@@ -1496,7 +1418,7 @@ public class Ambiance_ProgressBar : Control
 
     public bool ShowPercentage
     {
-        get { return _ShowPercentage; }
+        get => _ShowPercentage;
         set
         {
             _ShowPercentage = value;
@@ -1504,18 +1426,18 @@ public class Ambiance_ProgressBar : Control
         }
     }
 
-    #endregion
+    #endregion Properties
     #region EventArgs
 
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
         this.Height = 20;
-        Size minimumSize = new Size(58, 20);
+        var minimumSize = new Size(58, 20);
         this.MinimumSize = minimumSize;
     }
 
-    #endregion
+    #endregion EventArgs
 
     public Ambiance_ProgressBar()
     {
@@ -1543,8 +1465,8 @@ public class Ambiance_ProgressBar : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        Bitmap B = new Bitmap(Width, Height);
-        Graphics G = Graphics.FromImage(B);
+        var B = new Bitmap(Width, Height);
+        var G = Graphics.FromImage(B);
 
         G.Clear(Color.Transparent);
         G.SmoothingMode = SmoothingMode.HighQuality;
@@ -1558,9 +1480,9 @@ public class Ambiance_ProgressBar : Control
         // Draw inside background
         G.FillRectangle(new SolidBrush(Color.FromArgb(244, 241, 243)), R1);
         G.SetClip(GP1);
-        G.FillPath(new SolidBrush(Color.FromArgb(244, 241, 243)), RoundRectangle.RoundRect(new Rectangle(1, 1, Width - 3, Height / 2 - 2), 4));
+        G.FillPath(new SolidBrush(Color.FromArgb(244, 241, 243)), RoundRectangle.RoundRect(new Rectangle(1, 1, Width - 3, (Height / 2) - 2), 4));
 
-        I1 = (int)Math.Round(((this._Value - this._Minimum) / (double)(this._Maximum - this._Minimum)) * (this.Width - 3));
+        I1 = (int)Math.Round((this._Value - this._Minimum) / (double)(this._Maximum - this._Minimum) * (this.Width - 3));
         if (I1 > 1)
         {
             GP3 = RoundRectangle.RoundRect(new Rectangle(1, 1, I1, Height - 3), 4);
@@ -1574,7 +1496,7 @@ public class Ambiance_ProgressBar : Control
             // Draw diagonal lines
             if (_DrawHatch == true)
             {
-                for (int i = 0; i <= (Width - 1) * _Maximum / _Value; i += 20)
+                for (var i = 0; i <= (Width - 1) * _Maximum / _Value; i += 20)
                 {
                     G.DrawLine(new Pen(new SolidBrush(Color.FromArgb(25, Color.White)), 10.0F), new Point(System.Convert.ToInt32(i), 0), new Point(i - 10, Height));
                 }
@@ -1587,9 +1509,9 @@ public class Ambiance_ProgressBar : Control
         }
 
         // Draw value as a string
-        string DrawString = Convert.ToString(Convert.ToInt32(Value)) + "%";
-        int textX = (int)(this.Width - G.MeasureString(DrawString, Font).Width - 1);
-        int textY = (this.Height / 2) - (System.Convert.ToInt32(G.MeasureString(DrawString, Font).Height / 2) - 2);
+        var DrawString = Convert.ToString(Convert.ToInt32(Value)) + "%";
+        var textX = (int)(this.Width - G.MeasureString(DrawString, Font).Width - 1);
+        var textY = (this.Height / 2) - (System.Convert.ToInt32(G.MeasureString(DrawString, Font).Height / 2) - 2);
 
         if (_ShowPercentage == true)
         {
@@ -1611,16 +1533,16 @@ public class Ambiance_ProgressBar : Control
         // Draw border
         G.DrawPath(new Pen(Color.FromArgb(180, 180, 180)), GP2);
 
-        e.Graphics.DrawImage((Image)(B.Clone()), 0, 0);
+        e.Graphics.DrawImage((Image)B.Clone(), 0, 0);
         G.Dispose();
         B.Dispose();
     }
 }
 
-#endregion
+#endregion ProgressBar
 #region Progress Indicator
 
-class Ambiance_ProgressIndicator : Control
+internal class Ambiance_ProgressIndicator : Control
 {
     #region Variables
 
@@ -1633,28 +1555,25 @@ class Ambiance_ProgressIndicator : Control
     private int IndicatorIndex;
     private readonly BufferedGraphicsContext GraphicsContext = BufferedGraphicsManager.Current;
 
-    #endregion
+    #endregion Variables
     #region Custom Properties
 
     public Color P_BaseColor
     {
-        get { return BaseColor.Color; }
-        set { BaseColor.Color = value; }
+        get => BaseColor.Color; set => BaseColor.Color = value;
     }
 
     public Color P_AnimationColor
     {
-        get { return AnimationColor.Color; }
-        set { AnimationColor.Color = value; }
+        get => AnimationColor.Color; set => AnimationColor.Color = value;
     }
 
     public int P_AnimationSpeed
     {
-        get { return AnimationSpeed.Interval; }
-        set { AnimationSpeed.Interval = value; }
+        get => AnimationSpeed.Interval; set => AnimationSpeed.Interval = value;
     }
 
-    #endregion
+    #endregion Custom Properties
     #region EventArgs
 
     protected override void OnSizeChanged(EventArgs e)
@@ -1691,7 +1610,7 @@ class Ambiance_ProgressIndicator : Control
         this.Invalidate(false);
     }
 
-    #endregion
+    #endregion EventArgs
 
     public Ambiance_ProgressIndicator()
     {
@@ -1706,18 +1625,18 @@ class Ambiance_ProgressIndicator : Control
 
     private void SetStandardSize()
     {
-        int _Size = Math.Max(Width, Height);
+        var _Size = Math.Max(Width, Height);
         Size = new Size(_Size, _Size);
     }
 
     private void SetPoints()
     {
-        Stack<PointF> stack = new Stack<PointF>();
-        PointF startingFloatPoint = new PointF(Width / 2f, Height / 2f);
-        for (float i = 0f; i < 360f; i += 45f)
+        var stack = new Stack<PointF>();
+        var startingFloatPoint = new PointF(Width / 2f, Height / 2f);
+        for (var i = 0f; i < 360f; i += 45f)
         {
             this.SetValue(startingFloatPoint, (int)Math.Round((double)((Width / 2.0) - 15.0)), (double)i);
-            PointF endPoint = this.EndPoint;
+            var endPoint = this.EndPoint;
             endPoint = new PointF(endPoint.X - 7.5f, endPoint.Y - 7.5f);
             stack.Push(endPoint);
         }
@@ -1728,7 +1647,7 @@ class Ambiance_ProgressIndicator : Control
     {
         if ((this.Width > 0) && (this.Height > 0))
         {
-            Size size2 = new Size(this.Width + 1, this.Height + 1);
+            var size2 = new Size(this.Width + 1, this.Height + 1);
             this.GraphicsContext.MaximumBuffer = size2;
             this.BuffGraphics = this.GraphicsContext.Allocate(this.CreateGraphics(), this.ClientRectangle);
             this.BuffGraphics.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -1739,8 +1658,8 @@ class Ambiance_ProgressIndicator : Control
     {
         base.OnPaint(e);
         this.BuffGraphics.Graphics.Clear(this.BackColor);
-        int num2 = this.FloatPoint.Length - 1;
-        for (int i = 0; i <= num2; i++)
+        var num2 = this.FloatPoint.Length - 1;
+        for (var i = 0; i <= num2; i++)
         {
             if (this.IndicatorIndex == i)
             {
@@ -1766,7 +1685,7 @@ class Ambiance_ProgressIndicator : Control
 
     private void SetValue(PointF StartingFloatPoint, int Length, double Angle)
     {
-        double CircleRadian = Math.PI * Angle / 180.0;
+        var CircleRadian = Math.PI * Angle / 180.0;
 
         _StartingFloatPoint = StartingFloatPoint;
         Rise = AssignValues(ref Run, Length);
@@ -1778,21 +1697,21 @@ class Ambiance_ProgressIndicator : Control
     {
         get
         {
-            float LocationX = Convert.ToSingle(_StartingFloatPoint.Y + Rise);
-            float LocationY = Convert.ToSingle(_StartingFloatPoint.X + Run);
+            var LocationX = Convert.ToSingle(_StartingFloatPoint.Y + Rise);
+            var LocationY = Convert.ToSingle(_StartingFloatPoint.X + Run);
 
             return new PointF(LocationY, LocationX);
         }
     }
 }
 
-#endregion
-#region  Toggle Button
+#endregion Progress Indicator
+#region Toggle Button
 
 [DefaultEvent("ToggledChanged")]
 public class Ambiance_Toggle : Control
 {
-    #region  Enums
+    #region Enums
 
     public enum _Type
     {
@@ -1801,22 +1720,15 @@ public class Ambiance_Toggle : Control
         IO
     }
 
-    #endregion
-    #region  Variables
+    #endregion Enums
+    #region Variables
 
     public delegate void ToggledChangedEventHandler();
     private ToggledChangedEventHandler ToggledChangedEvent;
 
     public event ToggledChangedEventHandler ToggledChanged
     {
-        add
-        {
-            ToggledChangedEvent = (ToggledChangedEventHandler)System.Delegate.Combine(ToggledChangedEvent, value);
-        }
-        remove
-        {
-            ToggledChangedEvent = (ToggledChangedEventHandler)System.Delegate.Remove(ToggledChangedEvent, value);
-        }
+        add => ToggledChangedEvent = (ToggledChangedEventHandler)System.Delegate.Combine(ToggledChangedEvent, value); remove => ToggledChangedEvent = (ToggledChangedEventHandler)System.Delegate.Remove(ToggledChangedEvent, value);
     }
 
     private bool _Toggled;
@@ -1824,30 +1736,23 @@ public class Ambiance_Toggle : Control
     private Rectangle Bar;
     private Size cHandle = new Size(15, 20);
 
-    #endregion
-    #region  Properties
+    #endregion Variables
+    #region Properties
 
     public bool Toggled
     {
-        get
-        {
-            return _Toggled;
-        }
+        get => _Toggled;
         set
         {
             _Toggled = value;
             Invalidate();
-            if (ToggledChangedEvent != null)
-                ToggledChangedEvent();
+            ToggledChangedEvent?.Invoke();
         }
     }
 
     public _Type Type
     {
-        get
-        {
-            return ToggleType;
-        }
+        get => ToggleType;
         set
         {
             ToggleType = value;
@@ -1855,8 +1760,8 @@ public class Ambiance_Toggle : Control
         }
     }
 
-    #endregion
-    #region  EventArgs
+    #endregion Properties
+    #region EventArgs
 
     protected override void OnResize(EventArgs e)
     {
@@ -1869,29 +1774,27 @@ public class Ambiance_Toggle : Control
     {
         base.OnMouseUp(e);
         Toggled = !Toggled;
-        Focus();
+        _ = Focus();
     }
 
-    #endregion
+    #endregion EventArgs
 
-    public Ambiance_Toggle()
-    {
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.DoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
-    }
+    public Ambiance_Toggle() => SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.DoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
 
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
         base.OnPaint(e);
-        Graphics G = e.Graphics;
+        var G = e.Graphics;
 
         G.SmoothingMode = SmoothingMode.HighQuality;
         G.Clear(Parent.BackColor);
 
-        int SwitchXLoc = 3;
-        Rectangle ControlRectangle = new Rectangle(0, 0, Width - 1, Height - 1);
-        GraphicsPath ControlPath = RoundRectangle.RoundRect(ControlRectangle, 4);
+        var ControlRectangle = new Rectangle(0, 0, Width - 1, Height - 1);
+        var ControlPath = RoundRectangle.RoundRect(ControlRectangle, 4);
 
-        LinearGradientBrush BackgroundLGB = default(LinearGradientBrush);
+        int SwitchXLoc;
+
+        LinearGradientBrush BackgroundLGB;
         if (_Toggled)
         {
             SwitchXLoc = 37;
@@ -1941,9 +1844,9 @@ public class Ambiance_Toggle : Control
                 break;
         }
 
-        Rectangle SwitchRectangle = new Rectangle(SwitchXLoc, 0, Width - 38, Height);
-        GraphicsPath SwitchPath = RoundRectangle.RoundRect(SwitchRectangle, 4);
-        LinearGradientBrush SwitchButtonLGB = new LinearGradientBrush(SwitchRectangle, Color.FromArgb(253, 253, 253), Color.FromArgb(240, 238, 237), LinearGradientMode.Vertical);
+        var SwitchRectangle = new Rectangle(SwitchXLoc, 0, Width - 38, Height);
+        var SwitchPath = RoundRectangle.RoundRect(SwitchRectangle, 4);
+        var SwitchButtonLGB = new LinearGradientBrush(SwitchRectangle, Color.FromArgb(253, 253, 253), Color.FromArgb(240, 238, 237), LinearGradientMode.Vertical);
 
         // Fill switch background gradient
         G.FillPath(SwitchButtonLGB, SwitchPath);
@@ -1962,11 +1865,11 @@ public class Ambiance_Toggle : Control
     }
 }
 
-#endregion
+#endregion Toggle Button
 #region CheckBox
 
 [DefaultEvent("CheckedChanged")]
-class Ambiance_CheckBox : Control
+internal class Ambiance_CheckBox : Control
 {
     #region Variables
 
@@ -1978,24 +1881,21 @@ class Ambiance_CheckBox : Control
     public event CheckedChangedEventHandler CheckedChanged;
     public delegate void CheckedChangedEventHandler(object sender);
 
-    #endregion
+    #endregion Variables
     #region Properties
 
     public bool Checked
     {
-        get { return _Checked; }
+        get => _Checked;
         set
         {
             _Checked = value;
-            if (CheckedChanged != null)
-            {
-                CheckedChanged(this);
-            }
+            CheckedChanged?.Invoke(this);
             Invalidate();
         }
     }
 
-    #endregion
+    #endregion Properties
 
     public Ambiance_CheckBox()
     {
@@ -2011,11 +1911,8 @@ class Ambiance_CheckBox : Control
     protected override void OnClick(EventArgs e)
     {
         _Checked = !_Checked;
-        if (CheckedChanged != null)
-        {
-            CheckedChanged(this);
-        }
-        Focus();
+        CheckedChanged?.Invoke(this);
+        _ = Focus();
         Invalidate();
         base.OnClick(e);
     }
@@ -2036,7 +1933,7 @@ class Ambiance_CheckBox : Control
             R2 = new Rectangle(0, 0, Width, Height);
             GB = new LinearGradientBrush(new Rectangle(0, 0, 25, 25), Color.FromArgb(213, 85, 32), Color.FromArgb(224, 123, 82), 90);
 
-            GraphicsPath MyDrawer = Shape;
+            var MyDrawer = Shape;
             MyDrawer.AddArc(0, 0, 7, 7, 180, 90);
             MyDrawer.AddArc(7, 0, 7, 7, -90, 90);
             MyDrawer.AddArc(7, 7, 7, 7, 0, 90);
@@ -2053,7 +1950,7 @@ class Ambiance_CheckBox : Control
     {
         base.OnPaint(e);
 
-        Graphics MyDrawer = e.Graphics;
+        var MyDrawer = e.Graphics;
         MyDrawer.Clear(Parent.BackColor);
         MyDrawer.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -2072,11 +1969,11 @@ class Ambiance_CheckBox : Control
     }
 }
 
-#endregion
+#endregion CheckBox
 #region RadioButton
 
 [DefaultEvent("CheckedChanged")]
-class Ambiance_RadioButton : Control
+internal class Ambiance_RadioButton : Control
 {
     #region Enums
 
@@ -2088,32 +1985,29 @@ class Ambiance_RadioButton : Control
         Block = 3
     }
 
-    #endregion
+    #endregion Enums
     #region Variables
 
     private bool _Checked;
     public event CheckedChangedEventHandler CheckedChanged;
     public delegate void CheckedChangedEventHandler(object sender);
 
-    #endregion
+    #endregion Variables
     #region Properties
 
     public bool Checked
     {
-        get { return _Checked; }
+        get => _Checked;
         set
         {
             _Checked = value;
             InvalidateControls();
-            if (CheckedChanged != null)
-            {
-                CheckedChanged(this);
-            }
+            CheckedChanged?.Invoke(this);
             Invalidate();
         }
     }
 
-    #endregion
+    #endregion Properties
     #region EventArgs
 
     protected override void OnTextChanged(System.EventArgs e)
@@ -2131,12 +2025,15 @@ class Ambiance_RadioButton : Control
     protected override void OnMouseDown(System.Windows.Forms.MouseEventArgs e)
     {
         if (!_Checked)
+        {
             Checked = true;
+        }
+
         base.OnMouseDown(e);
-        Focus();
+        _ = Focus();
     }
 
-    #endregion
+    #endregion EventArgs
 
     public Ambiance_RadioButton()
     {
@@ -2149,7 +2046,9 @@ class Ambiance_RadioButton : Control
     private void InvalidateControls()
     {
         if (!IsHandleCreated || !_Checked)
+        {
             return;
+        }
 
         foreach (Control _Control in Parent.Controls)
         {
@@ -2163,16 +2062,16 @@ class Ambiance_RadioButton : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        Graphics MyDrawer = e.Graphics;
+        var MyDrawer = e.Graphics;
 
         MyDrawer.Clear(Parent.BackColor);
         MyDrawer.SmoothingMode = SmoothingMode.AntiAlias;
 
         // Fill the body of the ellipse with a gradient
-        LinearGradientBrush LGB = new LinearGradientBrush(new Rectangle(new Point(0, 0), new Size(14, 14)), Color.FromArgb(213, 85, 32), Color.FromArgb(224, 123, 82), 90);
+        var LGB = new LinearGradientBrush(new Rectangle(new Point(0, 0), new Size(14, 14)), Color.FromArgb(213, 85, 32), Color.FromArgb(224, 123, 82), 90);
         MyDrawer.FillEllipse(LGB, new Rectangle(new Point(0, 0), new Size(14, 14)));
 
-        GraphicsPath GP = new GraphicsPath();
+        var GP = new GraphicsPath();
         GP.AddEllipse(new Rectangle(0, 0, 14, 14));
         MyDrawer.SetClip(GP);
         MyDrawer.ResetClip();
@@ -2183,7 +2082,7 @@ class Ambiance_RadioButton : Control
         // Draw an ellipse inside the body
         if (_Checked)
         {
-            SolidBrush EllipseColor = new SolidBrush(Color.FromArgb(255, 255, 255));
+            var EllipseColor = new SolidBrush(Color.FromArgb(255, 255, 255));
             MyDrawer.FillEllipse(EllipseColor, new Rectangle(new Point(4, 4), new Size(6, 6)));
         }
         MyDrawer.DrawString(Text, Font, new SolidBrush(Color.FromArgb(76, 76, 95)), 16, 7, new StringFormat { LineAlignment = StringAlignment.Center });
@@ -2191,25 +2090,22 @@ class Ambiance_RadioButton : Control
     }
 }
 
-#endregion
-#region  ComboBox
+#endregion RadioButton
+#region ComboBox
 
 public class Ambiance_ComboBox : ComboBox
 {
-    #region  Variables
+    #region Variables
 
     private int _StartIndex = 0;
     private Color _HoverSelectionColor; // VBConversions Note: Initial value cannot be assigned here since it is non-static.  Assignment has been moved to the class constructors.
 
-    #endregion
-    #region  Custom Properties
+    #endregion Variables
+    #region Custom Properties
 
     public int StartIndex
     {
-        get
-        {
-            return _StartIndex;
-        }
+        get => _StartIndex;
         set
         {
             _StartIndex = value;
@@ -2226,10 +2122,7 @@ public class Ambiance_ComboBox : ComboBox
 
     public Color HoverSelectionColor
     {
-        get
-        {
-            return _HoverSelectionColor;
-        }
+        get => _HoverSelectionColor;
         set
         {
             _HoverSelectionColor = value;
@@ -2237,15 +2130,15 @@ public class Ambiance_ComboBox : ComboBox
         }
     }
 
-    #endregion
-    #region  EventArgs
+    #endregion Custom Properties
+    #region EventArgs
 
     protected override void OnDrawItem(DrawItemEventArgs e)
     {
         base.OnDrawItem(e);
-        LinearGradientBrush LGB = new LinearGradientBrush(e.Bounds, Color.FromArgb(246, 132, 85), Color.FromArgb(231, 108, 57), 90.0F);
+        var LGB = new LinearGradientBrush(e.Bounds, Color.FromArgb(246, 132, 85), Color.FromArgb(231, 108, 57), 90.0F);
 
-        if (System.Convert.ToInt32((e.State & DrawItemState.Selected)) == (int)DrawItemState.Selected)
+        if (System.Convert.ToInt32(e.State & DrawItemState.Selected) == (int)DrawItemState.Selected)
         {
             if (!(e.Index == -1))
             {
@@ -2272,21 +2165,15 @@ public class Ambiance_ComboBox : ComboBox
         ResumeLayout();
     }
 
-    protected override void OnPaintBackground(PaintEventArgs e)
-    {
-        base.OnPaintBackground(e);
-    }
+    protected override void OnPaintBackground(PaintEventArgs e) => base.OnPaintBackground(e);
 
-    protected override void OnResize(EventArgs e)
-    {
-        base.OnResize(e);
-    }
+    protected override void OnResize(EventArgs e) => base.OnResize(e);
 
-    #endregion
+    #endregion EventArgs
 
     public Ambiance_ComboBox()
     {
-        SetStyle((ControlStyles)(139286), true);
+        SetStyle((ControlStyles)139286, true);
         SetStyle(ControlStyles.Selectable, false);
 
         DrawMode = DrawMode.OwnerDrawFixed;
@@ -2303,16 +2190,14 @@ public class Ambiance_ComboBox : ComboBox
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        LinearGradientBrush LGB = default(LinearGradientBrush);
-        GraphicsPath GP = default(GraphicsPath);
 
         e.Graphics.Clear(Parent.BackColor);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
         // Create a curvy border
-        GP = RoundRectangle.RoundRect(0, 0, Width - 1, Height - 1, 5);
+        var GP = RoundRectangle.RoundRect(0, 0, Width - 1, Height - 1, 5);
         // Fills the body of the rectangle with a gradient
-        LGB = new LinearGradientBrush(ClientRectangle, Color.FromArgb(253, 252, 252), Color.FromArgb(239, 237, 236), 90.0F);
+        var LGB = new LinearGradientBrush(ClientRectangle, Color.FromArgb(253, 252, 252), Color.FromArgb(239, 237, 236), 90.0F);
 
         e.Graphics.SetClip(GP);
         e.Graphics.FillRectangle(LGB, ClientRectangle);
@@ -2339,12 +2224,12 @@ public class Ambiance_ComboBox : ComboBox
     }
 }
 
-#endregion
-#region  NumericUpDown
+#endregion ComboBox
+#region NumericUpDown
 
 public class Ambiance_NumericUpDown : Control
 {
-    #region  Enums
+    #region Enums
 
     public enum _TextAlignment
     {
@@ -2352,11 +2237,11 @@ public class Ambiance_NumericUpDown : Control
         Center
     }
 
-    #endregion
-    #region  Variables
+    #endregion Enums
+    #region Variables
 
     private GraphicsPath Shape;
-    private Pen P1;
+    private readonly Pen P1;
 
     private long _Value;
     private long _Minimum;
@@ -2365,17 +2250,14 @@ public class Ambiance_NumericUpDown : Control
     private bool KeyboardNum;
     private _TextAlignment MyStringAlignment;
 
-    private Timer LongPressTimer = new Timer();
+    private readonly Timer LongPressTimer = new Timer();
 
-    #endregion
-    #region  Properties
+    #endregion Variables
+    #region Properties
 
     public long Value
     {
-        get
-        {
-            return _Value;
-        }
+        get => _Value;
         set
         {
             if (value <= _Maximum & value >= _Minimum)
@@ -2388,10 +2270,7 @@ public class Ambiance_NumericUpDown : Control
 
     public long Minimum
     {
-        get
-        {
-            return _Minimum;
-        }
+        get => _Minimum;
         set
         {
             if (value < _Maximum)
@@ -2408,10 +2287,7 @@ public class Ambiance_NumericUpDown : Control
 
     public long Maximum
     {
-        get
-        {
-            return _Maximum;
-        }
+        get => _Maximum;
         set
         {
             if (value > _Minimum)
@@ -2428,10 +2304,7 @@ public class Ambiance_NumericUpDown : Control
 
     public _TextAlignment TextAlignment
     {
-        get
-        {
-            return MyStringAlignment;
-        }
+        get => MyStringAlignment;
         set
         {
             MyStringAlignment = value;
@@ -2439,8 +2312,8 @@ public class Ambiance_NumericUpDown : Control
         }
     }
 
-    #endregion
-    #region  EventArgs
+    #endregion Properties
+    #region EventArgs
 
     protected override void OnResize(System.EventArgs e)
     {
@@ -2461,14 +2334,7 @@ public class Ambiance_NumericUpDown : Control
         Xval = e.Location.X;
         Invalidate();
 
-        if (e.X < Width - 50)
-        {
-            Cursor = Cursors.IBeam;
-        }
-        else
-        {
-            Cursor = Cursors.Default;
-        }
+        Cursor = e.X < Width - 50 ? Cursors.IBeam : Cursors.Default;
         if (e.X > this.Width - 25 && e.X < this.Width - 10)
         {
             Cursor = Cursors.Hand;
@@ -2499,7 +2365,7 @@ public class Ambiance_NumericUpDown : Control
             }
             KeyboardNum = !KeyboardNum;
         }
-        Focus();
+        _ = Focus();
         Invalidate();
     }
 
@@ -2514,10 +2380,7 @@ public class Ambiance_NumericUpDown : Control
         base.OnMouseUp(e);
         LongPressTimer.Stop();
     }
-    private void LongPressTimer_Tick(object sender, EventArgs e)
-    {
-        ClickButton();
-    }
+    private void LongPressTimer_Tick(object sender, EventArgs e) => ClickButton();
     protected override void OnKeyPress(System.Windows.Forms.KeyPressEventArgs e)
     {
         base.OnKeyPress(e);
@@ -2525,7 +2388,7 @@ public class Ambiance_NumericUpDown : Control
         {
             if (KeyboardNum == true)
             {
-                _Value = long.Parse((_Value).ToString() + e.KeyChar.ToString().ToString());
+                _Value = long.Parse(_Value.ToString() + e.KeyChar.ToString().ToString());
             }
             if (_Value > _Maximum)
             {
@@ -2542,7 +2405,7 @@ public class Ambiance_NumericUpDown : Control
         base.OnKeyUp(e);
         if (e.KeyCode == Keys.Back)
         {
-            string TemporaryValue = _Value.ToString();
+            var TemporaryValue = _Value.ToString();
             TemporaryValue = TemporaryValue.Remove(Convert.ToInt32(TemporaryValue.Length - 1));
             if (TemporaryValue.Length == 0)
             {
@@ -2574,7 +2437,7 @@ public class Ambiance_NumericUpDown : Control
         }
     }
 
-    #endregion
+    #endregion EventArgs
 
     public Ambiance_NumericUpDown()
     {
@@ -2610,12 +2473,10 @@ public class Ambiance_NumericUpDown : Control
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
         base.OnPaint(e);
-        Bitmap B = new Bitmap(Width, Height);
-        Graphics G = Graphics.FromImage(B);
-        LinearGradientBrush BackgroundLGB = default(LinearGradientBrush);
+        var B = new Bitmap(Width, Height);
+        var G = Graphics.FromImage(B);
 
-        BackgroundLGB = new LinearGradientBrush(ClientRectangle, Color.FromArgb(246, 246, 246), Color.FromArgb(254, 254, 254), 90.0F);
-
+        var BackgroundLGB = new LinearGradientBrush(ClientRectangle, Color.FromArgb(246, 246, 246), Color.FromArgb(254, 254, 254), 90.0F);
         G.SmoothingMode = SmoothingMode.AntiAlias;
 
         G.Clear(Color.Transparent); // Set control background color
@@ -2636,19 +2497,19 @@ public class Ambiance_NumericUpDown : Control
                 G.DrawString(System.Convert.ToString(Value), Font, new SolidBrush(ForeColor), new Rectangle(0, 0, Width - 1, Height - 1), new StringFormat() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center });
                 break;
         }
-        e.Graphics.DrawImage((Image)(B.Clone()), 0, 0);
+        e.Graphics.DrawImage((Image)B.Clone(), 0, 0);
         G.Dispose();
         B.Dispose();
     }
 }
 
-#endregion
-#region  TrackBar
+#endregion NumericUpDown
+#region TrackBar
 
 [DefaultEvent("ValueChanged")]
 public class Ambiance_TrackBar : Control
 {
-    #region  Enums
+    #region Enums
 
     public enum ValueDivisor
     {
@@ -2658,8 +2519,8 @@ public class Ambiance_TrackBar : Control
         By1000 = 1000
     }
 
-    #endregion
-    #region  Variables
+    #endregion Enums
+    #region Variables
 
     private GraphicsPath PipeBorder;
     private GraphicsPath FillValue;
@@ -2678,15 +2539,12 @@ public class Ambiance_TrackBar : Control
     private bool _JumpToMouse = false;
     private ValueDivisor DividedValue = ValueDivisor.By1;
 
-    #endregion
-    #region  Properties
+    #endregion Variables
+    #region Properties
 
     public int Minimum
     {
-        get
-        {
-            return _Minimum;
-        }
+        get => _Minimum;
         set
         {
             if (value >= _Maximum)
@@ -2705,10 +2563,7 @@ public class Ambiance_TrackBar : Control
 
     public int Maximum
     {
-        get
-        {
-            return _Maximum;
-        }
+        get => _Maximum;
         set
         {
             if (value <= _Minimum)
@@ -2730,54 +2585,26 @@ public class Ambiance_TrackBar : Control
 
     public event ValueChangedEventHandler ValueChanged
     {
-        add
-        {
-            ValueChangedEvent = (ValueChangedEventHandler)System.Delegate.Combine(ValueChangedEvent, value);
-        }
-        remove
-        {
-            ValueChangedEvent = (ValueChangedEventHandler)System.Delegate.Remove(ValueChangedEvent, value);
-        }
+        add => ValueChangedEvent = (ValueChangedEventHandler)System.Delegate.Combine(ValueChangedEvent, value); remove => ValueChangedEvent = (ValueChangedEventHandler)System.Delegate.Remove(ValueChangedEvent, value);
     }
 
     public int Value
     {
-        get
-        {
-            return _Value;
-        }
+        get => _Value;
         set
         {
             if (_Value != value)
             {
-                if (value < _Minimum)
-                {
-                    _Value = _Minimum;
-                }
-                else
-                {
-                    if (value > _Maximum)
-                    {
-                        _Value = _Maximum;
-                    }
-                    else
-                    {
-                        _Value = value;
-                    }
-                }
+                _Value = value < _Minimum ? _Minimum : value > _Maximum ? _Maximum : value;
                 Invalidate();
-                if (ValueChangedEvent != null)
-                    ValueChangedEvent();
+                ValueChangedEvent?.Invoke();
             }
         }
     }
 
     public ValueDivisor ValueDivison
     {
-        get
-        {
-            return DividedValue;
-        }
+        get => DividedValue;
         set
         {
             DividedValue = value;
@@ -2788,22 +2615,12 @@ public class Ambiance_TrackBar : Control
     [Browsable(false)]
     public float ValueToSet
     {
-        get
-        {
-            return _Value / (int)DividedValue;
-        }
-        set
-        {
-            Value = (int)(value * (int)DividedValue);
-        }
+        get => _Value / (int)DividedValue; set => Value = (int)(value * (int)DividedValue);
     }
 
     public bool JumpToMouse
     {
-        get
-        {
-            return _JumpToMouse;
-        }
+        get => _JumpToMouse;
         set
         {
             _JumpToMouse = value;
@@ -2813,34 +2630,24 @@ public class Ambiance_TrackBar : Control
 
     public bool DrawValueString
     {
-        get
-        {
-            return _DrawValueString;
-        }
+        get => _DrawValueString;
         set
         {
             _DrawValueString = value;
-            if (_DrawValueString == true)
-            {
-                Height = 35;
-            }
-            else
-            {
-                Height = 22;
-            }
+            Height = _DrawValueString == true ? 35 : 22;
             Invalidate();
         }
     }
 
-    #endregion
-    #region  EventArgs
+    #endregion Properties
+    #region EventArgs
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
         checked
         {
-            bool flag = this.Cap && e.X > -1 && e.X < this.Width + 1;
+            var flag = this.Cap && e.X > -1 && e.X < this.Width + 1;
             if (flag)
             {
                 this.Value = this._Minimum + (int)Math.Round((this._Maximum - this._Minimum) * (e.X / (double)this.Width));
@@ -2851,15 +2658,15 @@ public class Ambiance_TrackBar : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
-        bool flag = e.Button == MouseButtons.Left;
+        var flag = e.Button == MouseButtons.Left;
         checked
         {
             if (flag)
             {
-                this.ValueDrawer = (int)Math.Round(((this._Value - this._Minimum) / (double)(this._Maximum - this._Minimum)) * (this.Width - 11));
+                this.ValueDrawer = (int)Math.Round((this._Value - this._Minimum) / (double)(this._Maximum - this._Minimum) * (this.Width - 11));
                 this.TrackBarHandleRect = new Rectangle(this.ValueDrawer, 0, 25, 25);
                 this.Cap = this.TrackBarHandleRect.Contains(e.Location);
-                this.Focus();
+                _ = this.Focus();
                 flag = this._JumpToMouse;
                 if (flag)
                 {
@@ -2875,7 +2682,7 @@ public class Ambiance_TrackBar : Control
         Cap = false;
     }
 
-    #endregion
+    #endregion EventArgs
 
     public Ambiance_TrackBar()
     {
@@ -2888,20 +2695,13 @@ public class Ambiance_TrackBar : Control
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        if (_DrawValueString == true)
-        {
-            Height = 35;
-        }
-        else
-        {
-            Height = 22;
-        }
+        Height = _DrawValueString == true ? 35 : 22;
     }
 
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
         base.OnPaint(e);
-        Graphics G = e.Graphics;
+        var G = e.Graphics;
 
         G.Clear(Parent.BackColor);
         G.SmoothingMode = SmoothingMode.AntiAlias;
@@ -2910,7 +2710,7 @@ public class Ambiance_TrackBar : Control
 
         try
         {
-            this.ValueDrawer = (int)Math.Round(((this._Value - this._Minimum) / (double)(this._Maximum - this._Minimum)) * (this.Width - 11));
+            this.ValueDrawer = (int)Math.Round((this._Value - this._Minimum) / (double)(this._Maximum - this._Minimum) * (this.Width - 11));
         }
         catch (Exception)
         {
@@ -2938,8 +2738,8 @@ public class Ambiance_TrackBar : Control
     }
 }
 
-#endregion
-#region  Panel
+#endregion TrackBar
+#region Panel
 
 public class Ambiance_Panel : ContainerControl
 {
@@ -2951,7 +2751,7 @@ public class Ambiance_Panel : ContainerControl
 
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
-        Graphics G = e.Graphics;
+        var G = e.Graphics;
 
         this.Font = new Font("Tahoma", 9);
         this.BackColor = Color.White;
@@ -2962,11 +2762,11 @@ public class Ambiance_Panel : ContainerControl
     }
 }
 
-#endregion
+#endregion Panel
 #region TextBox
 
 [DefaultEvent("TextChanged")]
-class Amiance_TextBox : Control
+internal class Amiance_TextBox : Control
 {
     #region Variables
 
@@ -2978,14 +2778,14 @@ class Amiance_TextBox : Control
     private HorizontalAlignment ALNType;
     private bool isPasswordMasked = false;
     private Pen P1;
-    private SolidBrush B1;
+    private readonly SolidBrush B1;
 
-    #endregion
+    #endregion Variables
     #region Properties
 
     public HorizontalAlignment TextAlignment
     {
-        get { return ALNType; }
+        get => ALNType;
         set
         {
             ALNType = value;
@@ -2994,7 +2794,7 @@ class Amiance_TextBox : Control
     }
     public int MaxLength
     {
-        get { return _maxchars; }
+        get => _maxchars;
         set
         {
             _maxchars = value;
@@ -3005,7 +2805,7 @@ class Amiance_TextBox : Control
 
     public bool UseSystemPasswordChar
     {
-        get { return isPasswordMasked; }
+        get => isPasswordMasked;
         set
         {
             AmbianceTB.UseSystemPasswordChar = UseSystemPasswordChar;
@@ -3015,7 +2815,7 @@ class Amiance_TextBox : Control
     }
     public bool ReadOnly
     {
-        get { return _ReadOnly; }
+        get => _ReadOnly;
         set
         {
             _ReadOnly = value;
@@ -3027,7 +2827,7 @@ class Amiance_TextBox : Control
     }
     public bool Multiline
     {
-        get { return _Multiline; }
+        get => _Multiline;
         set
         {
             _Multiline = value;
@@ -3047,7 +2847,7 @@ class Amiance_TextBox : Control
         }
     }
 
-    #endregion
+    #endregion Properties
     #region EventArgs
 
     protected override void OnTextChanged(System.EventArgs e)
@@ -3070,10 +2870,7 @@ class Amiance_TextBox : Control
         AmbianceTB.Font = Font;
     }
 
-    protected override void OnPaintBackground(PaintEventArgs e)
-    {
-        base.OnPaintBackground(e);
-    }
+    protected override void OnPaintBackground(PaintEventArgs e) => base.OnPaintBackground(e);
 
     private void _OnKeyDown(object Obj, KeyEventArgs e)
     {
@@ -3114,7 +2911,7 @@ class Amiance_TextBox : Control
         }
 
         Shape = new GraphicsPath();
-        GraphicsPath _with1 = Shape;
+        var _with1 = Shape;
         _with1.AddArc(0, 0, 10, 10, 180, 90);
         _with1.AddArc(Width - 11, 0, 10, 10, -90, 90);
         _with1.AddArc(Width - 11, Height - 11, 10, 10, 0, 90);
@@ -3125,13 +2922,13 @@ class Amiance_TextBox : Control
     protected override void OnGotFocus(System.EventArgs e)
     {
         base.OnGotFocus(e);
-        AmbianceTB.Focus();
+        _ = AmbianceTB.Focus();
     }
 
-    #endregion
+    #endregion EventArgs
     public void AddTextBox()
     {
-        TextBox _TB = AmbianceTB;
+        var _TB = AmbianceTB;
         _TB.Size = new Size(Width - 10, 33);
         _TB.Location = new Point(7, 4);
         _TB.Text = string.Empty;
@@ -3166,12 +2963,12 @@ class Amiance_TextBox : Control
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
         base.OnPaint(e);
-        Bitmap B = new Bitmap(Width, Height);
-        Graphics G = Graphics.FromImage(B);
+        var B = new Bitmap(Width, Height);
+        var G = Graphics.FromImage(B);
 
         G.SmoothingMode = SmoothingMode.AntiAlias;
 
-        TextBox _TB = AmbianceTB;
+        var _TB = AmbianceTB;
         _TB.Width = Width - 10;
         _TB.TextAlign = TextAlignment;
         _TB.UseSystemPasswordChar = UseSystemPasswordChar;
@@ -3186,11 +2983,11 @@ class Amiance_TextBox : Control
     }
 }
 
-#endregion
+#endregion TextBox
 #region RichTextBox
 
 [DefaultEvent("TextChanged")]
-class Ambiance_RichTextBox : Control
+internal class Ambiance_RichTextBox : Control
 {
     #region Variables
 
@@ -3201,12 +2998,12 @@ class Ambiance_RichTextBox : Control
     private GraphicsPath Shape;
     private Pen P1;
 
-    #endregion
+    #endregion Variables
     #region Properties
 
     public override string Text
     {
-        get { return AmbianceRTB.Text; }
+        get => AmbianceRTB.Text;
         set
         {
             AmbianceRTB.Text = value;
@@ -3215,7 +3012,7 @@ class Ambiance_RichTextBox : Control
     }
     public bool ReadOnly
     {
-        get { return _ReadOnly; }
+        get => _ReadOnly;
         set
         {
             _ReadOnly = value;
@@ -3227,7 +3024,7 @@ class Ambiance_RichTextBox : Control
     }
     public bool WordWrap
     {
-        get { return _WordWrap; }
+        get => _WordWrap;
         set
         {
             _WordWrap = value;
@@ -3239,7 +3036,7 @@ class Ambiance_RichTextBox : Control
     }
     public bool AutoWordSelection
     {
-        get { return _AutoWordSelection; }
+        get => _AutoWordSelection;
         set
         {
             _AutoWordSelection = value;
@@ -3249,7 +3046,7 @@ class Ambiance_RichTextBox : Control
             }
         }
     }
-    #endregion
+    #endregion Properties
     #region EventArgs
 
     protected override void OnTextChanged(System.EventArgs e)
@@ -3271,10 +3068,7 @@ class Ambiance_RichTextBox : Control
         base.OnFontChanged(e);
         AmbianceRTB.Font = Font;
     }
-    protected override void OnPaintBackground(PaintEventArgs e)
-    {
-        base.OnPaintBackground(e);
-    }
+    protected override void OnPaintBackground(PaintEventArgs e) => base.OnPaintBackground(e);
 
     protected override void OnSizeChanged(System.EventArgs e)
     {
@@ -3299,7 +3093,7 @@ class Ambiance_RichTextBox : Control
         base.OnResize(e);
 
         Shape = new GraphicsPath();
-        GraphicsPath _with1 = Shape;
+        var _with1 = Shape;
         _with1.AddArc(0, 0, 10, 10, 180, 90);
         _with1.AddArc(Width - 11, 0, 10, 10, -90, 90);
         _with1.AddArc(Width - 11, Height - 11, 10, 10, 0, 90);
@@ -3307,11 +3101,11 @@ class Ambiance_RichTextBox : Control
         _with1.CloseAllFigures();
     }
 
-    #endregion
+    #endregion EventArgs
 
     public void AddRichTextBox()
     {
-        RichTextBox _TB = AmbianceRTB;
+        var _TB = AmbianceRTB;
         _TB.BackColor = Color.White;
         _TB.Size = new Size(Width - 10, 100);
         _TB.Location = new Point(7, 5);
@@ -3346,8 +3140,8 @@ class Ambiance_RichTextBox : Control
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
         base.OnPaint(e);
-        Bitmap B = new Bitmap(this.Width, this.Height);
-        Graphics G = Graphics.FromImage(B);
+        var B = new Bitmap(this.Width, this.Height);
+        var G = Graphics.FromImage(B);
         G.SmoothingMode = SmoothingMode.AntiAlias;
         G.Clear(Color.Transparent);
         G.FillPath(Brushes.White, this.Shape);
@@ -3358,8 +3152,8 @@ class Ambiance_RichTextBox : Control
     }
 }
 
-#endregion
-#region  ListBox
+#endregion RichTextBox
+#region ListBox
 
 public class Ambiance_ListBox : ListBox
 {
@@ -3376,12 +3170,12 @@ public class Ambiance_ListBox : ListBox
     {
         base.OnDrawItem(e);
         e.DrawBackground();
-        LinearGradientBrush LGB = new LinearGradientBrush(e.Bounds, Color.FromArgb(246, 132, 85), Color.FromArgb(231, 108, 57), 90.0F);
-        if (System.Convert.ToInt32((e.State & DrawItemState.Selected)) == (int)DrawItemState.Selected)
+        var LGB = new LinearGradientBrush(e.Bounds, Color.FromArgb(246, 132, 85), Color.FromArgb(231, 108, 57), 90.0F);
+        if (System.Convert.ToInt32(e.State & DrawItemState.Selected) == (int)DrawItemState.Selected)
         {
             e.Graphics.FillRectangle(LGB, e.Bounds);
         }
-        using (SolidBrush b = new SolidBrush(e.ForeColor))
+        using (var b = new SolidBrush(e.ForeColor))
         {
             if (base.Items.Count == 0)
             {
@@ -3398,14 +3192,14 @@ public class Ambiance_ListBox : ListBox
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        Region MyRegion = new Region(e.ClipRectangle);
+        var MyRegion = new Region(e.ClipRectangle);
         e.Graphics.FillRegion(new SolidBrush(this.BackColor), MyRegion);
 
         if (this.Items.Count > 0)
         {
-            for (int i = 0; i <= this.Items.Count - 1; i++)
+            for (var i = 0; i <= this.Items.Count - 1; i++)
             {
-                System.Drawing.Rectangle RegionRect = this.GetItemRectangle(i);
+                var RegionRect = this.GetItemRectangle(i);
                 if (e.ClipRectangle.IntersectsWith(RegionRect))
                 {
                     if ((this.SelectionMode == SelectionMode.One && this.SelectedIndex == i) || (this.SelectionMode == SelectionMode.MultiSimple && this.SelectedIndices.Contains(i)) || (this.SelectionMode == SelectionMode.MultiExtended && this.SelectedIndices.Contains(i)))
@@ -3423,15 +3217,12 @@ public class Ambiance_ListBox : ListBox
     }
 }
 
-#endregion
-#region  TabControl
+#endregion ListBox
+#region TabControl
 
 public class Ambiance_TabControl : TabControl
 {
-    public Ambiance_TabControl()
-    {
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
-    }
+    public Ambiance_TabControl() => SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
 
     protected override void CreateHandle()
     {
@@ -3443,12 +3234,12 @@ public class Ambiance_TabControl : TabControl
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        Graphics G = e.Graphics;
-        Rectangle ItemBoundsRect = new Rectangle();
+        var G = e.Graphics;
+        _ = new Rectangle();
         G.Clear(Parent.BackColor);
-        for (int TabIndex = 0; TabIndex <= TabCount - 1; TabIndex++)
+        for (var TabIndex = 0; TabIndex <= TabCount - 1; TabIndex++)
         {
-            ItemBoundsRect = GetTabRect(TabIndex);
+            _ = GetTabRect(TabIndex);
             if (!(TabIndex == SelectedIndex))
             {
                 G.DrawString(TabPages[TabIndex].Text, new Font(Font.Name, Font.Size - 2, FontStyle.Bold), new SolidBrush(Color.FromArgb(80, 76, 76)), new Rectangle(GetTabRect(TabIndex).Location, GetTabRect(TabIndex).Size), new StringFormat
@@ -3463,9 +3254,9 @@ public class Ambiance_TabControl : TabControl
         G.FillPath(new SolidBrush(Color.FromArgb(247, 246, 246)), RoundRectangle.RoundRect(0, 23, Width - 1, Height - 24, 2));
         G.DrawPath(new Pen(Color.FromArgb(201, 198, 195)), RoundRectangle.RoundRect(0, 23, Width - 1, Height - 24, 2));
 
-        for (int ItemIndex = 0; ItemIndex <= TabCount - 1; ItemIndex++)
+        for (var ItemIndex = 0; ItemIndex <= TabCount - 1; ItemIndex++)
         {
-            ItemBoundsRect = GetTabRect(ItemIndex);
+            var ItemBoundsRect = GetTabRect(ItemIndex);
             if (ItemIndex == SelectedIndex)
             {
                 // Draw header tabs
@@ -3489,4 +3280,4 @@ public class Ambiance_TabControl : TabControl
     }
 }
 
-#endregion
+#endregion TabControl

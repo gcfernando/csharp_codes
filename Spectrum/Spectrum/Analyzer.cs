@@ -6,6 +6,8 @@ using System.Windows.Threading;
 using Un4seen.Bass;
 using Un4seen.BassWasapi;
 
+// Developed by Gehan Fernando
+
 namespace Spectrum
 {
     public delegate void OnChangeHandler(object obj, OnChangeEventArgs e);
@@ -34,7 +36,7 @@ namespace Spectrum
         private readonly OnChangeEventArgs _changeArgs;
 
         private bool _initialized = false;
-        private List<Device> devices = null;
+        private List<Device> _devices = null;
 
         private readonly int[] _bandEdges;
 
@@ -88,7 +90,7 @@ namespace Spectrum
 
         private List<Device> DeviceList()
         {
-            devices = new List<Device>();
+            _devices = new List<Device>();
 
             var count = BassWasapi.BASS_WASAPI_GetDeviceCount();
 
@@ -104,12 +106,12 @@ namespace Spectrum
 
                 if (isEnabled && isInput && isLoopback)
                 {
-                    devices.Add(new Device { Index = i, DeviceName = di.name });
+                    _devices.Add(new Device { Index = i, DeviceName = di.name });
                     SelectIndex = i;
                 }
             }
 
-            return devices;
+            return _devices;
         }
 
         private void Enable(bool value)

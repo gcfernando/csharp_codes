@@ -7,6 +7,7 @@ using System.Windows.Forms;
 
 namespace Spectrum
 {
+    // Developed by Gehan Fernando
     [Description("VerticalProgressBar Maximum Value")]
     [Category("VerticalProgressBar")]
     [RefreshProperties(RefreshProperties.All)]
@@ -205,7 +206,7 @@ namespace Spectrum
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            Rectangle r = ClientRectangle;
+            var r = ClientRectangle;
             if (r.Width <= 0 || r.Height <= 0)
             {
                 return;
