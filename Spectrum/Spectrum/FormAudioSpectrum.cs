@@ -51,11 +51,6 @@ namespace Spectrum
                 }
             }
 
-            if (device != null)
-            {
-                timerSpectrum.Enabled = true;
-            }
-
             Taskbar.SetState(Handle, Taskbar.TaskbarStates.NoProgress);
         }
 
@@ -88,26 +83,6 @@ namespace Spectrum
             }
         }
 
-        private void timerSpectrum_Tick(object sender, EventArgs e)
-        {
-            if (device == null)
-            {
-                return;
-            }
-
-            var meter = device.AudioMeterInformation;
-
-            var ch = meter.PeakValues;
-            if (ch.Count >= 2)
-            {
-                progressBarLeft.Value = (int)Math.Round(ch[0] * 100);
-                progressBarRight.Value = (int)Math.Round(ch[1] * 100);
-            }
-
-            Taskbar.SetValue(Handle, (int)Math.Round(meter.MasterPeakValue * 100), 100);
-            Taskbar.SetState(Handle, Taskbar.TaskbarStates.Error);
-        }
-
         private void Int_barList()
         {
             _progressList = new List<VerticalProgressBar>(82);
@@ -122,8 +97,8 @@ namespace Spectrum
                     Maximum = 255, // keep exact behavior
                     Name = string.Concat("ProgressBar", "_", i.ToString("00")),
                     Tag = i.ToString(),
-                    Size = new Size(14, 220),
-                    Location = new Point(basePoint, 145),
+                    Size = new Size(14, 320),
+                    Location = new Point(basePoint, 50),
                     Visible = true
                 };
 
