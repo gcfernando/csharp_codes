@@ -96,11 +96,19 @@ namespace Spectrum
                     Location = new Point(basePoint, 50),
                     Visible = true,
 
-                    PeakHoldMilliseconds = 300,
-                    PeakDecayPerTick = 1.2f,
-                    PeakLineThickness = 2,
-                    TopEmphasisStart = 0.85f,
-                    TopEmphasisStrength = 0.45f
+                    ResponseTimeMs = 28,     // fast attack, natural feel
+                    SnapUpThreshold = 2,      // transients pop instantly
+
+                    PeakHoldMilliseconds = 280,    // long enough to read, not annoying
+                    PeakDecayPerTick = 1.3f,   // smooth, non-jittery fall
+                    PeakLineThickness = 2,      // perfect visual weight
+
+                    TopEmphasisStart = 0.88f,  // red only in top 12%
+                    TopEmphasisStrength = 0.55f,  // clearly red when reached
+
+                    HeatIntensityCurve = 1.75f,  // soft notes visible, loud stays loud
+
+                    AnimationFps = 60     // stable, no CPU abuse
                 };
 
                 _progressList.Add(progress);

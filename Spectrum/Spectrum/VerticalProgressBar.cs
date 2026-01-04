@@ -1,53 +1,64 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace Spectrum
 {
-    [Description("VerticalProgressBar Maximum Value")]
+    // Developer : Gehan Fernando
+
+    [Description("Vertical spectrum-style progress bar optimized for real-time updates")]
     [Category("VerticalProgressBar")]
     [RefreshProperties(RefreshProperties.All)]
     public class VerticalProgressBar : ProgressBar
     {
-        private const float SmoothFactor = 0.35f;
-
+        // ========================= Shared timer for all instances (low overhead) =========================
         private static readonly object s_lock = new object();
         private static Timer s_timer;
         private static readonly List<WeakReference<VerticalProgressBar>> s_instances =
             new List<WeakReference<VerticalProgressBar>>(128);
 
+        private static readonly Stopwatch s_sw = Stopwatch.StartNew();
+        private static long s_lastTicks;
+
+        // ========================= Internal state =========================
+        private volatile int _targetValue;
         private float _displayValue;
-        private int _targetValue;
 
-        // Peak hold (visual only)
+        // Peak hold (visual)
         private float _peakValue;
-        private int _peakHoldTicksLeft;
+        private float _peakHoldLeftMs;
 
+        // ========================= Cached geometry + colors (performance) =========================
+        private readonly List<Rectangle> _bricks = new List<Rectangle>(256);
+        private readonly List<float> _brickT = new List<float>(256);      // 0 bottom -> 1 top
+        private readonly List<Color> _brickColors = new List<Color>(256);  // cached heat colors
+
+        private int _cachedW = -1, _cachedH = -1;
+        private bool _colorsDirty = true;
+
+        // Reusable GDI objects (no per-frame allocations)
         private SolidBrush _backBrush;
-        private SolidBrush _fillBrush;          // fallback if Heatmap disabled
-        private readonly SolidBrush _brickShadeBrush;
-        private readonly Pen _borderPen;
+        private readonly SolidBrush _workBrush = new SolidBrush(Color.Black);
+        private readonly SolidBrush _brickShadeBrush = new SolidBrush(Color.FromArgb(65, 0, 0, 0));
+        private SolidBrush _highlightBrush;
+        private readonly Pen _borderPen = new Pen(Color.FromArgb(120, 0, 0, 0), 1f);
 
-        // ===== Brick look settings =====
+        // ========================= Appearance - bricks =========================
+        [Category("Appearance")]
+        [Description("Padding inside control.")]
+        public int BrickPadding { get; set; } = 2;
+
         [Category("Appearance")]
         [Description("Height of each brick segment in pixels.")]
-        public int BrickHeight { get; set; } = 8;
+        public int BrickHeight { get; set; } = 6;
 
         [Category("Appearance")]
         [Description("Gap between bricks in pixels.")]
         public int BrickGap { get; set; } = 2;
-
-        [Category("Appearance")]
-        [Description("Inner padding for brick fill (pixels).")]
-        public int BrickPadding { get; set; } = 2;
-
-        // ===== Clarity / premium look =====
-        [Category("Appearance")]
-        [Description("Corner radius in pixels. 0 = square (default).")]
-        public int CornerRadius { get; set; } = 0;
 
         [Category("Appearance")]
         [Description("Draw a subtle highlight line inside each brick.")]
@@ -55,71 +66,149 @@ namespace Spectrum
 
         [Category("Appearance")]
         [Description("Opacity of brick highlight (0..255).")]
-        public int HighlightAlpha { get; set; } = 55;
+        public int HighlightAlpha
+        {
+            get => _highlightAlpha;
+            set
+            {
+                _highlightAlpha = Clamp(value, 0, 255);
+                BuildHighlightBrush();
+                Invalidate();
+            }
+        }
+        private int _highlightAlpha = 55;
 
         [Category("Appearance")]
-        [Description("High quality rendering (anti-alias / high quality).")]
-        public bool HighQualityRendering { get; set; } = true;
+        [Description("High quality rendering (anti-alias / high quality). Turn OFF for max FPS.")]
+        public bool HighQualityRendering { get; set; } = false;
 
-        // ===== Option B: Heatmap =====
+        // ========================= Heatmap (better gradient + RED at top) =========================
         [Category("Heatmap")]
-        [Description("Enable heatmap coloring (Green -> Yellow -> Orange -> Red).")]
-        public bool HeatmapEnabled { get; set; } = true;
-
-        [Category("Heatmap")]
-        [Description("Low level color (bottom).")]
-        public Color HeatLowColor { get; set; } = Color.FromArgb(0, 255, 80);
-
-        [Category("Heatmap")]
-        [Description("Mid level color.")]
-        public Color HeatMidColor { get; set; } = Color.FromArgb(255, 235, 0);
+        [Description("Enable heatmap coloring (green -> yellow -> orange -> red).")]
+        public bool HeatmapEnabled
+        {
+            get => _heatmapEnabled;
+            set { _heatmapEnabled = value; _colorsDirty = true; Invalidate(); }
+        }
+        private bool _heatmapEnabled = true;
 
         [Category("Heatmap")]
-        [Description("High level color.")]
-        public Color HeatHighColor { get; set; } = Color.FromArgb(255, 140, 0);
+        [Description("Bottom (low) color.")]
+        public Color HeatLowColor
+        {
+            get => _heatLowColor;
+            set { _heatLowColor = value; _colorsDirty = true; Invalidate(); }
+        }
+        private Color _heatLowColor = Color.FromArgb(0, 255, 80);
 
         [Category("Heatmap")]
-        [Description("Peak color (top).")]
-        public Color HeatPeakColor { get; set; } = Color.FromArgb(255, 40, 40);
+        [Description("Mid (yellow) color.")]
+        public Color HeatMidColor
+        {
+            get => _heatMidColor;
+            set { _heatMidColor = value; _colorsDirty = true; Invalidate(); }
+        }
+        private Color _heatMidColor = Color.FromArgb(255, 235, 0);
 
         [Category("Heatmap")]
-        [Description("Boost low-level visibility (1.0 = linear, 1.4..2.2 = more lively lows).")]
-        public float HeatIntensityCurve { get; set; } = 1.6f;
+        [Description("High (orange) color.")]
+        public Color HeatHighColor
+        {
+            get => _heatHighColor;
+            set { _heatHighColor = value; _colorsDirty = true; Invalidate(); }
+        }
+        private Color _heatHighColor = Color.FromArgb(255, 140, 0);
 
-        // ===== Visual only: Top red emphasis zone =====
+        [Category("Heatmap")]
+        [Description("Peak (top) color. Set to RED for spectrum look.")]
+        public Color HeatPeakColor
+        {
+            get => _heatPeakColor;
+            set { _heatPeakColor = value; _colorsDirty = true; Invalidate(); }
+        }
+        private Color _heatPeakColor = Color.Red;
+
+        [Category("Heatmap")]
+        [Description("Boost low-level visibility (1.0=linear; 1.3..2.2 looks better for audio).")]
+        public float HeatIntensityCurve
+        {
+            get => _heatCurve;
+            set { _heatCurve = Math.Max(0.15f, value); _colorsDirty = true; Invalidate(); }
+        }
+        private float _heatCurve = 1.6f;
+
+        // ===== Visual only: Top red emphasis zone (kept as you had) =====
         [Category("Heatmap")]
         [Description("Enable a stronger emphasis for the top zone (more 'spectrum-like').")]
-        public bool TopEmphasisEnabled { get; set; } = true;
+        public bool TopEmphasisEnabled
+        {
+            get => _topEmphasisEnabled;
+            set { _topEmphasisEnabled = value; _colorsDirty = true; Invalidate(); }
+        }
+        private bool _topEmphasisEnabled = true;
 
         [Category("Heatmap")]
-        [Description("Where emphasis starts (0..1). Example: 0.82 means top 18% emphasized.")]
-        public float TopEmphasisStart { get; set; } = 0.85f;
+        [Description("Where emphasis starts (0..1). Example: 0.85 means top 15% emphasized.")]
+        public float TopEmphasisStart
+        {
+            get => _topEmphasisStart;
+            set { _topEmphasisStart = Clamp01(value); _colorsDirty = true; Invalidate(); }
+        }
+        private float _topEmphasisStart = 0.85f;
 
         [Category("Heatmap")]
         [Description("How strong the emphasis is (0..1). Suggest 0.25..0.55.")]
-        public float TopEmphasisStrength { get; set; } = 0.45f;
+        public float TopEmphasisStrength
+        {
+            get => _topEmphasisStrength;
+            set { _topEmphasisStrength = Clamp01(value); _colorsDirty = true; Invalidate(); }
+        }
+        private float _topEmphasisStrength = 0.45f;
 
-        // ===== Visual only: Peak hold marker line =====
+        // ========================= Peak hold (kept / compatible names) =========================
         [Category("Peak Hold")]
-        [Description("Enable peak hold marker line (visual only).")]
+        [Description("Enable peak hold marker line.")]
         public bool PeakHoldEnabled { get; set; } = true;
 
         [Category("Peak Hold")]
-        [Description("Hold time for peak marker in milliseconds.")]
-        public int PeakHoldMilliseconds { get; set; } = 300;
+        [Description("Peak hold time (ms).")]
+        public int PeakHoldMilliseconds { get; set; } = 140;
 
         [Category("Peak Hold")]
-        [Description("Peak marker decay per tick after hold. (0.5..4.0 typical)")]
+        [Description("Peak decay per tick. (kept as requested)")]
         public float PeakDecayPerTick { get; set; } = 1.2f;
 
         [Category("Peak Hold")]
-        [Description("Peak marker thickness in pixels.")]
+        [Description("Peak marker thickness in pixels. (kept as requested)")]
         public int PeakLineThickness { get; set; } = 2;
 
         [Category("Peak Hold")]
         [Description("Peak marker color.")]
         public Color PeakLineColor { get; set; } = Color.FromArgb(255, 255, 255);
 
+        // ========================= Performance / Real-time update tuning =========================
+        [Category("Performance")]
+        [Description("Shared animation FPS (15..240). Default 60.")]
+        public int AnimationFps
+        {
+            get => _animationFps;
+            set
+            {
+                _animationFps = Clamp(value, 15, 240);
+                EnsureTimerConfigured();
+            }
+        }
+        private int _animationFps = 60;
+
+        [Category("Performance")]
+        [Description("Response time in ms. Lower = snappier, less lag. Typical: 30..80.")]
+        public int ResponseTimeMs { get; set; } = 45;
+
+        [Category("Performance")]
+        [Description("If target jumps up more than this many units, snap immediately (reduces perceived lag). 0 disables.")]
+        public int SnapUpThreshold { get; set; } = 6;
+
+        // ========================= ctor / dispose =========================
         public VerticalProgressBar()
         {
             SetStyle(ControlStyles.UserPaint |
@@ -127,127 +216,34 @@ namespace Spectrum
                      ControlStyles.OptimizedDoubleBuffer |
                      ControlStyles.ResizeRedraw, true);
 
-            SetStyle(ControlStyles.Opaque, true);
+            DoubleBuffered = true;
 
             _backBrush = new SolidBrush(BackColor);
-            _fillBrush = new SolidBrush(ForeColor);
-            _brickShadeBrush = new SolidBrush(Color.FromArgb(65, 0, 0, 0));
-            _borderPen = new Pen(Color.FromArgb(120, 0, 0, 0));
+            BuildHighlightBrush();
 
             _targetValue = base.Value;
             _displayValue = base.Value;
 
             _peakValue = _displayValue;
-            _peakHoldTicksLeft = 0;
+            _peakHoldLeftMs = 0;
 
             RegisterInstance();
             UpdateStyles();
         }
 
-        public new int Value
+        protected override void Dispose(bool disposing)
         {
-            get => base.Value;
-            set
+            if (disposing)
             {
-                var v = value;
-                if (v < Minimum)
-                {
-                    v = Minimum;
-                }
+                UnregisterInstance();
 
-                if (v > Maximum)
-                {
-                    v = Maximum;
-                }
-
-                if (base.Value != v)
-                {
-                    base.Value = v;
-                }
-
-                _targetValue = v;
-                Invalidate();
+                _backBrush?.Dispose();
+                _workBrush?.Dispose();
+                _brickShadeBrush?.Dispose();
+                _highlightBrush?.Dispose();
+                _borderPen?.Dispose();
             }
-        }
-
-        public new int Maximum
-        {
-            get => base.Maximum;
-            set
-            {
-                if (base.Maximum == value)
-                {
-                    return;
-                }
-
-                base.Maximum = value;
-
-                if (base.Value > base.Maximum)
-                {
-                    base.Value = base.Maximum;
-                }
-
-                if (_targetValue > base.Maximum)
-                {
-                    _targetValue = base.Maximum;
-                }
-
-                if (_displayValue > base.Maximum)
-                {
-                    _displayValue = base.Maximum;
-                }
-
-                if (_peakValue > base.Maximum)
-                {
-                    _peakValue = base.Maximum;
-                }
-
-                Invalidate();
-            }
-        }
-
-        public new int Minimum
-        {
-            get => base.Minimum;
-            set
-            {
-                if (base.Minimum == value)
-                {
-                    return;
-                }
-
-                base.Minimum = value;
-
-                if (base.Value < base.Minimum)
-                {
-                    base.Value = base.Minimum;
-                }
-
-                if (_targetValue < base.Minimum)
-                {
-                    _targetValue = base.Minimum;
-                }
-
-                if (_displayValue < base.Minimum)
-                {
-                    _displayValue = base.Minimum;
-                }
-
-                if (_peakValue < base.Minimum)
-                {
-                    _peakValue = base.Minimum;
-                }
-
-                Invalidate();
-            }
-        }
-
-        protected override void OnForeColorChanged(EventArgs e)
-        {
-            base.OnForeColorChanged(e);
-            _fillBrush?.Dispose();
-            _fillBrush = new SolidBrush(ForeColor);
-            Invalidate();
+            base.Dispose(disposing);
         }
 
         protected override void OnBackColorChanged(EventArgs e)
@@ -258,20 +254,56 @@ namespace Spectrum
             Invalidate();
         }
 
-        protected override void Dispose(bool disposing)
+        protected override void OnForeColorChanged(EventArgs e)
         {
-            if (disposing)
-            {
-                UnregisterInstance();
-
-                _backBrush?.Dispose();
-                _fillBrush?.Dispose();
-                _brickShadeBrush?.Dispose();
-                _borderPen?.Dispose();
-            }
-            base.Dispose(disposing);
+            base.OnForeColorChanged(e);
+            _colorsDirty = true;
+            Invalidate();
         }
 
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            _cachedW = -1;
+            _cachedH = -1;
+            _colorsDirty = true;
+            Invalidate();
+        }
+
+        // keep base.Value usable; we treat it as "target"
+        public new int Value
+        {
+            get => base.Value;
+            set
+            {
+                var v = Clamp(value, Minimum, Maximum);
+                base.Value = v;
+                _targetValue = v;
+            }
+        }
+
+        // Thread-safe helper for audio thread
+        public void SetTargetValueThreadSafe(int value)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            var v = Clamp(value, Minimum, Maximum);
+            if (InvokeRequired)
+            {
+                try
+                { _ = BeginInvoke((Action)(() => _targetValue = v)); }
+                catch { }
+            }
+            else
+            {
+                _targetValue = v;
+            }
+        }
+
+        // ========================= Paint =========================
         protected override void OnPaintBackground(PaintEventArgs pevent)
         {
             // no-op: we paint everything in OnPaint
@@ -292,159 +324,93 @@ namespace Spectrum
                 e.Graphics.CompositingQuality = CompositingQuality.HighQuality;
                 e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
             }
-
-            // Background
-            if (CornerRadius > 0)
-            {
-                using (var path = RoundedRect(r, CornerRadius))
-                {
-                    e.Graphics.FillPath(_backBrush, path);
-                }
-            }
             else
             {
-                e.Graphics.FillRectangle(_backBrush, r);
+                e.Graphics.SmoothingMode = SmoothingMode.None;
+                e.Graphics.PixelOffsetMode = PixelOffsetMode.None;
+                e.Graphics.CompositingQuality = CompositingQuality.HighSpeed;
+                e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
             }
 
-            var range = Maximum - Minimum;
-            if (range <= 0)
+            // Background (NO rounded corners)
+            e.Graphics.FillRectangle(_backBrush, r);
+
+            // Border
+            e.Graphics.DrawRectangle(_borderPen, r.X, r.Y, r.Width - 1, r.Height - 1);
+
+            EnsureGeometry(r);
+            if (_colorsDirty)
             {
-                DrawBorder(e, r);
-                return;
+                RebuildColorCache();
             }
 
-            var dv = _displayValue;
-            dv = Math.Max(Minimum, Math.Min(Maximum, dv));
-
-            var percent = (dv - Minimum) / range;
-            if (percent <= 0f)
-            {
-                DrawBorder(e, r);
-                return;
-            }
+            // compute fill
+            float range = Math.Max(1, Maximum - Minimum);
+            var p = Clamp01((_displayValue - Minimum) / range);
 
             var pad = BrickPadding;
             var innerX = r.X + pad;
             var innerW = r.Width - (pad * 2);
-            if (innerW <= 0)
+            var topInner = r.Top + pad;
+            var bottom = r.Bottom - pad;
+
+            if (innerW <= 0 || bottom <= topInner)
             {
-                DrawBorder(e, r);
                 return;
             }
 
-            var bottom = r.Bottom - pad;
-            var topInner = r.Top + pad;
+            var innerH = Math.Max(1, bottom - topInner);
+            var filledH = (int)Math.Round(innerH * p);
+            var topLimit = bottom - filledH;
 
-            var fillHeight = (int)((r.Height * percent) + 0.5f);
-            fillHeight = Math.Min(fillHeight, r.Height);
-
-            var topLimit = bottom - fillHeight;
-
-            var brickH = BrickHeight < 1 ? 1 : BrickHeight;
-            var gap = BrickGap < 0 ? 0 : BrickGap;
-
-            SolidBrush hiBrush = null;
-            if (BrickHighlight && HighlightAlpha > 0)
+            // Draw bricks (from bottom->top list)
+            for (var i = 0; i < _bricks.Count; i++)
             {
-                var a = Math.Min(255, HighlightAlpha);
-                hiBrush = new SolidBrush(Color.FromArgb(a, 255, 255, 255));
-            }
+                var brickRect = _bricks[i];
+                var active = brickRect.Top >= topLimit;
 
-            for (var y = bottom; y > topLimit;)
-            {
-                var h = brickH;
-                var brickTop = y - h;
-
-                if (brickTop < topLimit)
+                if (active)
                 {
-                    brickTop = topLimit;
-                    h = y - brickTop;
-                }
-                if (h <= 0)
-                {
-                    break;
-                }
+                    _workBrush.Color = HeatmapEnabled ? _brickColors[i] : ForeColor.IsEmpty ? Color.LimeGreen : ForeColor;
 
-                var brickRect = new Rectangle(innerX, brickTop, innerW, h);
+                    e.Graphics.FillRectangle(_workBrush, brickRect);
 
-                if (HeatmapEnabled)
-                {
-                    var centerY = brickRect.Top + (brickRect.Height * 0.5f);
-                    var innerHeight = Math.Max(1f, bottom - topInner);
-                    var t = (bottom - centerY) / innerHeight; // 0 bottom -> 1 top
-                    t = Clamp01(t);
-
-                    var curve = Math.Max(0.2f, HeatIntensityCurve);
-                    t = (float)Math.Pow(t, 1.0f / curve);
-
-                    var c = HeatmapColor(t, HeatLowColor, HeatMidColor, HeatHighColor, HeatPeakColor);
-
-                    if (TopEmphasisEnabled)
-                    {
-                        var start = Clamp01(TopEmphasisStart);
-                        var strength = Clamp01(TopEmphasisStrength);
-
-                        if (t >= start)
-                        {
-                            var u = (t - start) / Math.Max(0.0001f, 1f - start);
-                            var target = Lerp(HeatPeakColor, Color.White, 0.18f);
-                            c = Lerp(c, target, strength * (0.35f + (0.65f * u)));
-                        }
-                    }
-
+                    // shade line near top of brick
                     if (brickRect.Height >= 3)
                     {
-                        using (var lg = new LinearGradientBrush(
-                            brickRect,
-                            Lighten(c, 0.18f),
-                            Darken(c, 0.15f),
-                            LinearGradientMode.Vertical))
-                        {
-                            e.Graphics.FillRectangle(lg, brickRect);
-                        }
+                        var shadeRect = new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2);
+                        e.Graphics.FillRectangle(_brickShadeBrush, shadeRect);
                     }
-                    else
+
+                    // highlight line
+                    if (BrickHighlight && _highlightBrush != null && brickRect.Height >= 5)
                     {
-                        using (var b = new SolidBrush(c))
-                        {
-                            e.Graphics.FillRectangle(b, brickRect);
-                        }
+                        e.Graphics.FillRectangle(_highlightBrush,
+                            brickRect.X + 1,
+                            brickRect.Y + 3,
+                            Math.Max(1, brickRect.Width - 2),
+                            1);
                     }
                 }
                 else
                 {
-                    e.Graphics.FillRectangle(_fillBrush, brickRect);
+                    // inactive brick
+                    _workBrush.Color = Color.FromArgb(30, 255, 255, 255);
+                    e.Graphics.FillRectangle(_workBrush, brickRect);
                 }
-
-                if (brickRect.Height >= 3)
-                {
-                    var shadeRect = new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2);
-                    e.Graphics.FillRectangle(_brickShadeBrush, shadeRect);
-                }
-
-                if (hiBrush != null && brickRect.Height >= 5)
-                {
-                    e.Graphics.FillRectangle(hiBrush, brickRect.X + 1, brickRect.Y + 3, brickRect.Width - 2, 1);
-                }
-
-                y = brickTop - gap;
             }
 
-            hiBrush?.Dispose();
-
-            // Peak hold marker line (visual only)
+            // Peak hold marker line
             if (PeakHoldEnabled)
             {
-                var pv = Math.Max(Minimum, Math.Min(Maximum, _peakValue));
-                var p = Clamp01((pv - Minimum) / range);
+                var pv = Clamp(_peakValue, Minimum, Maximum);
+                var pp = Clamp01((pv - Minimum) / range);
 
-                var py = bottom - (int)(((bottom - topInner) * p) + 0.5f);
-
+                var py = bottom - (int)Math.Round(innerH * pp);
                 var thickness = Math.Max(1, PeakLineThickness);
                 var half = thickness / 2;
 
                 var peakRect = new Rectangle(innerX, py - half, innerW, thickness);
-
                 if (peakRect.Top < topInner)
                 {
                     peakRect.Y = topInner;
@@ -452,119 +418,184 @@ namespace Spectrum
 
                 if (peakRect.Bottom > bottom)
                 {
-                    peakRect.Y = bottom - peakRect.Height;
+                    peakRect.Y = bottom - thickness;
                 }
 
-                using (var shadow = new SolidBrush(Color.FromArgb(110, 0, 0, 0)))
-                {
-                    var shadowRect = peakRect;
-                    shadowRect.Y += 1;
-                    e.Graphics.FillRectangle(shadow, shadowRect);
-                }
                 using (var pb = new SolidBrush(PeakLineColor))
                 {
                     e.Graphics.FillRectangle(pb, peakRect);
                 }
             }
-
-            DrawBorder(e, r);
         }
 
-        private void DrawBorder(PaintEventArgs e, Rectangle r)
+        // ========================= Geometry + Heatmap cache =========================
+        private void EnsureGeometry(Rectangle r)
         {
-            if (CornerRadius > 0)
+            if (r.Width == _cachedW && r.Height == _cachedH)
             {
-                using (var path = RoundedRect(new Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1), CornerRadius))
+                return;
+            }
+
+            _cachedW = r.Width;
+            _cachedH = r.Height;
+
+            _bricks.Clear();
+            _brickT.Clear();
+            _brickColors.Clear();
+
+            var pad = BrickPadding;
+            var innerX = r.X + pad;
+            var innerW = r.Width - (pad * 2);
+            var top = r.Top + pad;
+            var bottom = r.Bottom - pad;
+
+            if (innerW <= 0 || bottom <= top)
+            {
+                return;
+            }
+
+            var brickH = Math.Max(1, BrickHeight);
+            var gap = Math.Max(0, BrickGap);
+
+            // bottom -> top bricks
+            var y = bottom - brickH;
+            while (y >= top)
+            {
+                var rect = new Rectangle(innerX, y, innerW, brickH);
+                _bricks.Add(rect);
+
+                // 0 bottom -> 1 top based on brick center
+                var centerY = rect.Top + (rect.Height * 0.5f);
+                var innerH = Math.Max(1f, bottom - top);
+                var t = (bottom - centerY) / innerH;
+                _brickT.Add(Clamp01(t));
+
+                y -= brickH + gap;
+            }
+
+            for (var i = 0; i < _bricks.Count; i++)
+            {
+                _brickColors.Add(Color.Empty);
+            }
+
+            _colorsDirty = true;
+        }
+
+        private void RebuildColorCache()
+        {
+            _colorsDirty = false;
+            if (!HeatmapEnabled || _bricks.Count == 0)
+            {
+                return;
+            }
+
+            var curve = Math.Max(0.15f, HeatIntensityCurve);
+
+            for (var i = 0; i < _bricks.Count; i++)
+            {
+                var t = _brickT[i];
+
+                // boost lows (audio looks better)
+                t = (float)Math.Pow(t, 1.0f / curve);
+
+                // smoother than RGB: HSV interpolation
+                var c = HeatmapColorHsv(t, HeatLowColor, HeatMidColor, HeatHighColor, HeatPeakColor);
+
+                // Top red emphasis: push toward RED at top
+                if (TopEmphasisEnabled && t >= TopEmphasisStart)
                 {
-                    e.Graphics.DrawPath(_borderPen, path);
+                    var u = (t - TopEmphasisStart) / Math.Max(0.0001f, 1f - TopEmphasisStart); // 0..1
+                    var strength = TopEmphasisStrength * (0.25f + (0.75f * u));
+                    c = LerpRgb(c, HeatPeakColor, strength);
                 }
+
+                _brickColors[i] = c;
+            }
+        }
+
+        private void BuildHighlightBrush()
+        {
+            _highlightBrush?.Dispose();
+            if (!BrickHighlight || HighlightAlpha <= 0)
+            {
+                _highlightBrush = null;
+                return;
+            }
+            _highlightBrush = new SolidBrush(Color.FromArgb(HighlightAlpha, 255, 255, 255));
+        }
+
+        // =========================
+        // Animation: dt-based smoothing (less lag) =========================
+        private void AnimateStep(float dtSeconds, float intervalMs)
+        {
+            var tv = _targetValue;
+            var dv = _displayValue;
+
+            // snap up for fast rising spectrum
+            if (SnapUpThreshold > 0 && tv > dv && (tv - dv) >= SnapUpThreshold)
+            {
+                _displayValue = tv;
             }
             else
             {
-                e.Graphics.DrawRectangle(_borderPen, 0, 0, r.Width - 1, r.Height - 1);
+                // dt-based exponential smoothing
+                var tau = Math.Max(0.01f, ResponseTimeMs / 1000f);
+                var alpha = 1f - (float)Math.Exp(-dtSeconds / tau);
+
+                _displayValue = dv + ((tv - dv) * alpha);
+
+                // deadband
+                if (Math.Abs(_displayValue - tv) < 0.05f)
+                {
+                    _displayValue = tv;
+                }
             }
+
+            UpdatePeakHold(intervalMs);
         }
 
-        private static GraphicsPath RoundedRect(Rectangle r, int radius)
+        private void UpdatePeakHold(float intervalMs)
         {
-            var d = radius * 2;
-            if (d <= 0)
+            if (!PeakHoldEnabled)
             {
-                var p = new GraphicsPath();
-                p.AddRectangle(r);
-                return p;
+                _peakValue = _displayValue;
+                _peakHoldLeftMs = 0;
+                return;
             }
 
-            d = Math.Min(d, r.Width);
-            d = Math.Min(d, r.Height);
-
-            var path = new GraphicsPath();
-            path.AddArc(r.X, r.Y, d, d, 180, 90);
-            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
-        }
-
-        private static Color HeatmapColor(float t, Color low, Color mid, Color high, Color peak)
-        {
-            if (t <= 0.55f)
+            if (_displayValue >= _peakValue)
             {
-                var u = t / 0.55f;
-                return Lerp(low, mid, u);
+                _peakValue = _displayValue;
+                _peakHoldLeftMs = Math.Max(0, PeakHoldMilliseconds);
+                return;
             }
-            if (t <= 0.85f)
+
+            if (_peakHoldLeftMs > 0)
             {
-                var u = (t - 0.55f) / 0.30f;
-                return Lerp(mid, high, u);
+                _peakHoldLeftMs -= intervalMs;
+                if (_peakHoldLeftMs < 0)
+                {
+                    _peakHoldLeftMs = 0;
+                }
+
+                return;
             }
-            var v = (t - 0.85f) / 0.15f;
-            return Lerp(high, peak, v);
+
+            // Keep your original behavior: decay per tick
+            _peakValue -= Math.Max(0.01f, PeakDecayPerTick);
+            if (_peakValue < _displayValue)
+            {
+                _peakValue = _displayValue;
+            }
         }
 
-        private static Color Lerp(Color a, Color b, float t)
-        {
-            t = Clamp01(t);
-            var r = a.R + (int)((b.R - a.R) * t);
-            var g = a.G + (int)((b.G - a.G) * t);
-            var bl = a.B + (int)((b.B - a.B) * t);
-            return Color.FromArgb(255, r, g, bl);
-        }
-
-        private static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
-
-        private static Color Lighten(Color c, float amount)
-        {
-            amount = Clamp01(amount);
-            var r = c.R + (int)((255 - c.R) * amount);
-            var g = c.G + (int)((255 - c.G) * amount);
-            var b = c.B + (int)((255 - c.B) * amount);
-            return Color.FromArgb(c.A, r, g, b);
-        }
-
-        private static Color Darken(Color c, float amount)
-        {
-            amount = Clamp01(amount);
-            var r = (int)(c.R * (1f - amount));
-            var g = (int)(c.G * (1f - amount));
-            var b = (int)(c.B * (1f - amount));
-            return Color.FromArgb(c.A, r, g, b);
-        }
-
-        // ===== shared animation loop =====
+        // ========================= Register / Unregister + timer =========================
         private void RegisterInstance()
         {
             lock (s_lock)
             {
                 s_instances.Add(new WeakReference<VerticalProgressBar>(this));
-
-                if (s_timer == null)
-                {
-                    s_timer = new Timer { Interval = 1000 / 60 };
-                    s_timer.Tick += (s, e) => AnimateAll();
-                    s_timer.Start();
-                }
+                EnsureTimerConfigured();
             }
         }
 
@@ -574,21 +605,71 @@ namespace Spectrum
             {
                 for (var i = s_instances.Count - 1; i >= 0; i--)
                 {
-                    if (!s_instances[i].TryGetTarget(out var ctrl) ||
-                        ctrl.IsDisposed ||
-                        ReferenceEquals(ctrl, this))
+                    if (!s_instances[i].TryGetTarget(out var ctrl) || ctrl == this || ctrl.IsDisposed)
                     {
                         s_instances.RemoveAt(i);
                     }
                 }
+
+                if (s_instances.Count == 0 && s_timer != null)
+                {
+                    s_timer.Stop();
+                    s_timer.Dispose();
+                    s_timer = null;
+                    s_lastTicks = 0;
+                }
             }
         }
 
-        private static void AnimateAll()
+        private void EnsureTimerConfigured()
         {
             lock (s_lock)
             {
-                var intervalMs = s_timer?.Interval ?? 16;
+                if (s_timer == null)
+                {
+                    s_timer = new Timer();
+                    s_timer.Tick += (s, e) => TickAll();
+                    s_lastTicks = 0;
+                }
+
+                var interval = Math.Max(4, (int)Math.Round(1000.0 / Math.Max(15, AnimationFps)));
+                if (s_timer.Interval != interval)
+                {
+                    s_timer.Interval = interval;
+                }
+
+                if (!s_timer.Enabled)
+                {
+                    s_timer.Start();
+                }
+            }
+        }
+
+        private static void TickAll()
+        {
+            lock (s_lock)
+            {
+                if (s_instances.Count == 0)
+                {
+                    return;
+                }
+
+                var now = s_sw.ElapsedTicks;
+                var last = s_lastTicks == 0 ? now : s_lastTicks;
+                s_lastTicks = now;
+
+                var dt = (float)((now - last) / (double)Stopwatch.Frequency);
+                if (dt <= 0)
+                {
+                    dt = 1f / 60f;
+                }
+
+                if (dt > 0.2f)
+                {
+                    dt = 0.2f;
+                }
+
+                var intervalMs = dt * 1000f;
 
                 for (var i = s_instances.Count - 1; i >= 0; i--)
                 {
@@ -598,28 +679,17 @@ namespace Spectrum
                         continue;
                     }
 
-                    var dv = ctrl._displayValue;
-                    float tv = ctrl._targetValue;
-                    var delta = tv - dv;
+                    var before = ctrl._displayValue;
+                    var beforePeak = ctrl._peakValue;
 
-                    if (delta > -0.25f && delta < 0.25f)
+                    ctrl.AnimateStep(dt, intervalMs);
+
+                    // repaint only if visible change
+                    if (Math.Abs(ctrl._displayValue - before) > 0.001f ||
+                        Math.Abs(ctrl._peakValue - beforePeak) > 0.001f)
                     {
-                        if (dv != tv)
-                        {
-                            ctrl._displayValue = tv;
-                            ctrl.UpdatePeakHold(intervalMs);
-                            ctrl.Invalidate();
-                        }
-                        else
-                        {
-                            ctrl.UpdatePeakHold(intervalMs);
-                        }
-                        continue;
+                        ctrl.Invalidate();
                     }
-
-                    ctrl._displayValue = dv + (delta * SmoothFactor);
-                    ctrl.UpdatePeakHold(intervalMs);
-                    ctrl.Invalidate();
                 }
 
                 if (s_instances.Count == 0 && s_timer != null)
@@ -627,53 +697,12 @@ namespace Spectrum
                     s_timer.Stop();
                     s_timer.Dispose();
                     s_timer = null;
+                    s_lastTicks = 0;
                 }
             }
         }
 
-        private void UpdatePeakHold(int timerIntervalMs)
-        {
-            if (!PeakHoldEnabled)
-            {
-                _peakValue = _displayValue;
-                _peakHoldTicksLeft = 0;
-                return;
-            }
-
-            var holdTicks = Math.Max(1, (int)Math.Ceiling(PeakHoldMilliseconds / Math.Max(1.0, timerIntervalMs)));
-
-            if (_displayValue >= _peakValue)
-            {
-                _peakValue = _displayValue;
-                _peakHoldTicksLeft = holdTicks;
-                return;
-            }
-
-            if (_peakHoldTicksLeft > 0)
-            {
-                _peakHoldTicksLeft--;
-                return;
-            }
-
-            var decay = Math.Max(0.1f, PeakDecayPerTick);
-            _peakValue -= decay;
-
-            if (_peakValue < _displayValue)
-            {
-                _peakValue = _displayValue;
-            }
-
-            if (_peakValue < Minimum)
-            {
-                _peakValue = Minimum;
-            }
-
-            if (_peakValue > Maximum)
-            {
-                _peakValue = Maximum;
-            }
-        }
-
+        // ========================= ProgressBar vertical style =========================
         protected override CreateParams CreateParams
         {
             get
@@ -683,5 +712,134 @@ namespace Spectrum
                 return cp;
             }
         }
+
+        // ========================= Color helpers (HSV gradient looks better than RGB) =========================
+        private static Color HeatmapColorHsv(float t, Color low, Color mid, Color high, Color peak)
+        {
+            t = Clamp01(t);
+
+            if (t <= 0.55f)
+            {
+                var u = t / 0.55f;
+                return LerpHsv(low, mid, u);
+            }
+            if (t <= 0.82f)
+            {
+                var u = (t - 0.55f) / (0.82f - 0.55f);
+                return LerpHsv(mid, high, u);
+            }
+            else
+            {
+                var u = (t - 0.82f) / (1f - 0.82f);
+                return LerpHsv(high, peak, u);
+            }
+        }
+
+        private static Color LerpRgb(Color a, Color b, float t)
+        {
+            t = Clamp01(t);
+            var r = a.R + (int)((b.R - a.R) * t);
+            var g = a.G + (int)((b.G - a.G) * t);
+            var bl = a.B + (int)((b.B - a.B) * t);
+            var al = a.A + (int)((b.A - a.A) * t);
+            return Color.FromArgb(Clamp(al, 0, 255), Clamp(r, 0, 255), Clamp(g, 0, 255), Clamp(bl, 0, 255));
+        }
+
+        private static Color LerpHsv(Color a, Color b, float t)
+        {
+            t = Clamp01(t);
+
+            RgbToHsv(a, out var ah, out var asat, out var av);
+            RgbToHsv(b, out var bh, out var bsat, out var bv);
+
+            // shortest hue path
+            var dh = bh - ah;
+            if (dh > 180f)
+            {
+                dh -= 360f;
+            }
+
+            if (dh < -180f)
+            {
+                dh += 360f;
+            }
+
+            var h = ah + (dh * t);
+            if (h < 0)
+            {
+                h += 360f;
+            }
+
+            if (h >= 360f)
+            {
+                h -= 360f;
+            }
+
+            var s = asat + ((bsat - asat) * t);
+            var v = av + ((bv - av) * t);
+
+            var alpha = a.A + (int)((b.A - a.A) * t);
+            var rgb = HsvToRgb(h, s, v);
+            return Color.FromArgb(Clamp(alpha, 0, 255), rgb.R, rgb.G, rgb.B);
+        }
+
+        private static void RgbToHsv(Color c, out float h, out float s, out float v)
+        {
+            var r = c.R / 255f;
+            var g = c.G / 255f;
+            var b = c.B / 255f;
+
+            var max = Math.Max(r, Math.Max(g, b));
+            var min = Math.Min(r, Math.Min(g, b));
+            var delta = max - min;
+
+            if (delta < 0.00001f)
+            {
+                h = 0f;
+            }
+            else
+            {
+                h = max == r ? 60f * ((g - b) / delta % 6f) : max == g ? 60f * (((b - r) / delta) + 2f) : 60f * (((r - g) / delta) + 4f);
+            }
+
+            if (h < 0)
+            {
+                h += 360f;
+            }
+
+            s = max <= 0 ? 0 : (delta / max);
+            v = max;
+        }
+
+        private static Color HsvToRgb(float h, float s, float v)
+        {
+            var c = v * s;
+            var x = c * (1 - Math.Abs((h / 60f % 2) - 1));
+            var m = v - c;
+
+            float r1, g1, b1;
+            if (h < 60)
+            { r1 = c; g1 = x; b1 = 0; }
+            else if (h < 120)
+            { r1 = x; g1 = c; b1 = 0; }
+            else if (h < 180)
+            { r1 = 0; g1 = c; b1 = x; }
+            else if (h < 240)
+            { r1 = 0; g1 = x; b1 = c; }
+            else if (h < 300)
+            { r1 = x; g1 = 0; b1 = c; }
+            else
+            { r1 = c; g1 = 0; b1 = x; }
+
+            var r = (int)Math.Round((r1 + m) * 255);
+            var g = (int)Math.Round((g1 + m) * 255);
+            var b = (int)Math.Round((b1 + m) * 255);
+
+            return Color.FromArgb(Clamp(r, 0, 255), Clamp(g, 0, 255), Clamp(b, 0, 255));
+        }
+
+        private static float Clamp01(float v) => v < 0 ? 0 : (v > 1 ? 1 : v);
+        private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+        private static float Clamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
     }
 }
