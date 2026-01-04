@@ -65,21 +65,16 @@ namespace Spectrum
             var spectrum = e.Spectrumdata;
             var count = Math.Min(spectrum.Count, _progressList.Count);
 
+            // Update values
             for (var i = 0; i < count; i++)
             {
-                var bar = _progressList[i];
-                var value = spectrum[i];
+                _progressList[i].Value = spectrum[i];
+            }
 
-                bar.Value = value;
-
-                var newColor = value <= 49
-                    ? Color.Lime
-                    : value <= 99 ? Color.LimeGreen : value <= 149 ? Color.GreenYellow : value <= 199 ? Color.Orange : Color.OrangeRed;
-
-                if (bar.ForeColor != newColor)
-                {
-                    bar.ForeColor = newColor;
-                }
+            // Optional: if spectrum has fewer bins than bars, clear remaining bars
+            for (var i = count; i < _progressList.Count; i++)
+            {
+                _progressList[i].Value = 0;
             }
         }
 
@@ -94,12 +89,18 @@ namespace Spectrum
                 var progress = new VerticalProgressBar
                 {
                     BackColor = Color.FromArgb(50, 50, 50),
-                    Maximum = 255, // keep exact behavior
-                    Name = string.Concat("ProgressBar", "_", i.ToString("00")),
+                    Maximum = 255,
+                    Name = $"ProgressBar_{i:00}",
                     Tag = i.ToString(),
                     Size = new Size(14, 320),
                     Location = new Point(basePoint, 50),
-                    Visible = true
+                    Visible = true,
+
+                    PeakHoldMilliseconds = 300,
+                    PeakDecayPerTick = 1.2f,
+                    PeakLineThickness = 2,
+                    TopEmphasisStart = 0.85f,
+                    TopEmphasisStrength = 0.45f
                 };
 
                 _progressList.Add(progress);
