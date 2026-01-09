@@ -16,20 +16,20 @@ namespace Spectrum
 
     public class OnChangeEventArgs : EventArgs
     {
-        public readonly List<byte> Spectrumdata;
-        public OnChangeEventArgs(List<byte> spectrumdata) => Spectrumdata = spectrumdata;
+        public IReadOnlyList<byte> Spectrumdata { get; }
+        public OnChangeEventArgs(List<byte> spectrumdata) => Spectrumdata = spectrumdata.AsReadOnly();
     }
 
     public class Analyzer
     {
         public static event OnChangeHandler OnChange;
 
-        private const int Size = 8192;
-        private const int Lines = 82;
-        private const int TimerIntervalMs = 25;
-        private const int HangThreshold = 3;
-        private const double RmsMultiplier = 3.0 * 255.0;
-        private const double RmsOffset = 4.0;
+        private const int _size = 8192;
+        private const int _lines = 82;
+        private const int _timerIntervalMs = 25;
+        private const int _hangThreshold = 3;
+        private const double _rmsMultiplier = 3.0 * 255.0;
+        private const double _rmsOffset = 4.0;
 
         private readonly DispatcherTimer _timer;
         private readonly float[] _fft;
@@ -42,7 +42,6 @@ namespace Spectrum
         private int _lastlevel;
         private int _hanctr;
         private bool _initialized;
-        private List<Device> _devices;
 
         public int SelectIndex { get; set; }
 
@@ -50,15 +49,15 @@ namespace Spectrum
         {
             BassNet.Registration("buddyknox@usa.org", "2X11841782815");
 
-            _fft = new float[Size];
-            _spectrumdata = new List<byte>(Lines);
-            _bandEdges = BuildBandsUpper(Lines, Size);
+            _fft = new float[_size];
+            _spectrumdata = new List<byte>(_lines);
+            _bandEdges = BuildBandsUpper(_lines, _size);
             _changeArgs = new OnChangeEventArgs(_spectrumdata);
             _process = new WASAPIPROC(Process);
 
             _timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(TimerIntervalMs)
+                Interval = TimeSpan.FromMilliseconds(_timerIntervalMs)
             };
             _timer.Tick += TimerTick;
 
@@ -86,7 +85,7 @@ namespace Spectrum
         private List<Device> DeviceList()
         {
             var count = BassWasapi.BASS_WASAPI_GetDeviceCount();
-            _devices = new List<Device>(count);
+            var _devices = new List<Device>(count);
 
             for (var i = 0; i < count; i++)
             {
@@ -179,9 +178,9 @@ namespace Spectrum
             var b0 = 0;
             const int fftOffset = 1;
 
-            for (var x = 0; x < Lines; x++)
+            for (var x = 0; x < _lines; x++)
             {
-                var b1 = Math.Min(_bandEdges[x], Size);
+                var b1 = Math.Min(_bandEdges[x], _size);
                 if (b1 <= b0)
                 {
                     b1 = b0 + 1;
@@ -199,7 +198,7 @@ namespace Spectrum
                 b0 = b1;
 
                 var rms = n > 0 ? Math.Sqrt(sum / n) : 0.0;
-                var y = (int)((Math.Sqrt(rms) * RmsMultiplier) - RmsOffset);
+                var y = (int)((Math.Sqrt(rms) * _rmsMultiplier) - _rmsOffset);
 
                 // Clamp for .NET 4.8
                 if (y > 255)
@@ -232,7 +231,7 @@ namespace Spectrum
 
             _lastlevel = level;
 
-            if (_hanctr > HangThreshold)
+            if (_hanctr > _hangThreshold)
             {
                 _hanctr = 0;
                 Free();

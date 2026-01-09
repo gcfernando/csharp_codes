@@ -264,23 +264,7 @@ public class Ambiance_ThemeContainer : ContainerControl
         {
             return 4;
         }
-        if (B1x && B4)
-        {
-            return 7;
-        }
-        if (B2x && B3)
-        {
-            return 5;
-        }
-        if (B2x && B4)
-        {
-            return 8;
-        }
-        if (B1x)
-        {
-            return 1;
-        }
-        return B2x ? 2 : B3 ? 3 : B4 ? 6 : 0;
+        return B1x && B4 ? 7 : B2x && B3 ? 5 : B2x && B4 ? 8 : B1x ? 1 : B2x ? 2 : B3 ? 3 : B4 ? 6 : 0;
     }
 
     private int Current;

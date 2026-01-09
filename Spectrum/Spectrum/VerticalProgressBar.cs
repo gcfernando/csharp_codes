@@ -16,13 +16,13 @@ namespace Spectrum
     public class VerticalProgressBar : ProgressBar
     {
         // ========================= Shared timer for all instances (low overhead) =========================
-        private static readonly object s_lock = new object();
-        private static Timer s_timer;
-        private static readonly List<WeakReference<VerticalProgressBar>> s_instances =
+        private static readonly object _lock = new object();
+        private static Timer _timer;
+        private static readonly List<WeakReference<VerticalProgressBar>> _instances =
             new List<WeakReference<VerticalProgressBar>>(128);
 
-        private static readonly Stopwatch s_stopwatch = Stopwatch.StartNew();
-        private static long s_lastTicks;
+        private static readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private static long _lastTicks;
 
         // ========================= Internal state =========================
         private volatile int _targetValue;
@@ -891,71 +891,71 @@ namespace Spectrum
         // ========================= Register / Unregister + timer =========================
         private void RegisterInstance()
         {
-            lock (s_lock)
+            lock (_lock)
             {
-                s_instances.Add(new WeakReference<VerticalProgressBar>(this));
+                _instances.Add(new WeakReference<VerticalProgressBar>(this));
                 EnsureTimerConfigured();
             }
         }
 
         private void UnregisterInstance()
         {
-            lock (s_lock)
+            lock (_lock)
             {
-                for (var i = s_instances.Count - 1; i >= 0; i--)
+                for (var i = _instances.Count - 1; i >= 0; i--)
                 {
-                    if (!s_instances[i].TryGetTarget(out var ctrl) || ctrl == this || ctrl.IsDisposed)
+                    if (!_instances[i].TryGetTarget(out var ctrl) || ctrl == this || ctrl.IsDisposed)
                     {
-                        s_instances.RemoveAt(i);
+                        _instances.RemoveAt(i);
                     }
                 }
 
-                if (s_instances.Count == 0 && s_timer != null)
+                if (_instances.Count == 0 && _timer != null)
                 {
-                    s_timer.Stop();
-                    s_timer.Dispose();
-                    s_timer = null;
-                    s_lastTicks = 0;
+                    _timer.Stop();
+                    _timer.Dispose();
+                    _timer = null;
+                    _lastTicks = 0;
                 }
             }
         }
 
         private void EnsureTimerConfigured()
         {
-            lock (s_lock)
+            lock (_lock)
             {
-                if (s_timer == null)
+                if (_timer == null)
                 {
-                    s_timer = new Timer();
-                    s_timer.Tick += (s, e) => TickAll();
-                    s_lastTicks = 0;
+                    _timer = new Timer();
+                    _timer.Tick += (s, e) => TickAll();
+                    _lastTicks = 0;
                 }
 
                 var interval = Math.Max(4, (int)Math.Round(1000.0 / Math.Max(15, AnimationFps)));
-                if (s_timer.Interval != interval)
+                if (_timer.Interval != interval)
                 {
-                    s_timer.Interval = interval;
+                    _timer.Interval = interval;
                 }
 
-                if (!s_timer.Enabled)
+                if (!_timer.Enabled)
                 {
-                    s_timer.Start();
+                    _timer.Start();
                 }
             }
         }
 
         private static void TickAll()
         {
-            lock (s_lock)
+            lock (_lock)
             {
-                if (s_instances.Count == 0)
+                if (_instances.Count == 0)
                 {
                     return;
                 }
 
-                var now = s_stopwatch.ElapsedTicks;
-                var last = s_lastTicks == 0 ? now : s_lastTicks;
-                s_lastTicks = now;
+                var now = _stopwatch.ElapsedTicks;
+                var last = _lastTicks == 0 ? now : _lastTicks;
+                _lastTicks = now;
 
                 var dt = (float)((now - last) / (double)Stopwatch.Frequency);
                 if (dt <= 0)
@@ -970,11 +970,11 @@ namespace Spectrum
 
                 var intervalMs = dt * 1000f;
 
-                for (var i = s_instances.Count - 1; i >= 0; i--)
+                for (var i = _instances.Count - 1; i >= 0; i--)
                 {
-                    if (!s_instances[i].TryGetTarget(out var ctrl) || ctrl.IsDisposed)
+                    if (!_instances[i].TryGetTarget(out var ctrl) || ctrl.IsDisposed)
                     {
-                        s_instances.RemoveAt(i);
+                        _instances.RemoveAt(i);
                         continue;
                     }
 
@@ -990,12 +990,12 @@ namespace Spectrum
                     }
                 }
 
-                if (s_instances.Count == 0 && s_timer != null)
+                if (_instances.Count == 0 && _timer != null)
                 {
-                    s_timer.Stop();
-                    s_timer.Dispose();
-                    s_timer = null;
-                    s_lastTicks = 0;
+                    _timer.Stop();
+                    _timer.Dispose();
+                    _timer = null;
+                    _lastTicks = 0;
                 }
             }
         }
@@ -1088,14 +1088,9 @@ namespace Spectrum
             var min = Math.Min(r, Math.Min(g, b));
             var delta = max - min;
 
-            if (delta < 0.00001f)
-            {
-                h = 0f;
-            }
-            else
-            {
-                h = max == r ? 60f * ((g - b) / delta % 6f) : max == g ? 60f * (((b - r) / delta) + 2f) : 60f * (((r - g) / delta) + 4f);
-            }
+            h = delta < 0.00001f
+                ? 0f
+                : max == r ? 60f * ((g - b) / delta % 6f) : max == g ? 60f * (((b - r) / delta) + 2f) : 60f * (((r - g) / delta) + 4f);
 
             if (h < 0)
             {
