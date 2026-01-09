@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows.Threading;
 
@@ -23,23 +24,25 @@ namespace Spectrum
     {
         public static event OnChangeHandler OnChange;
 
-        private readonly int _size = 8192;
-        private readonly int _lines = 82;
+        private const int Size = 8192;
+        private const int Lines = 82;
+        private const int TimerIntervalMs = 25;
+        private const int HangThreshold = 3;
+        private const double RmsMultiplier = 3.0 * 255.0;
+        private const double RmsOffset = 4.0;
 
         private readonly DispatcherTimer _timer;
         private readonly float[] _fft;
         private readonly WASAPIPROC _process;
+        private readonly int[] _bandEdges;
+        private readonly List<byte> _spectrumdata;
+        private readonly OnChangeEventArgs _changeArgs;
+        private static readonly object _sender = new object();
 
         private int _lastlevel;
         private int _hanctr;
-
-        private readonly List<byte> _spectrumdata;
-        private readonly OnChangeEventArgs _changeArgs;
-
-        private bool _initialized = false;
-        private List<Device> _devices = null;
-
-        private readonly int[] _bandEdges;
+        private bool _initialized;
+        private List<Device> _devices;
 
         public int SelectIndex { get; set; }
 
@@ -47,24 +50,17 @@ namespace Spectrum
         {
             BassNet.Registration("buddyknox@usa.org", "2X11841782815");
 
-            _fft = new float[_size];
-
-            _lastlevel = 0;
-            _hanctr = 0;
+            _fft = new float[Size];
+            _spectrumdata = new List<byte>(Lines);
+            _bandEdges = BuildBandsUpper(Lines, Size);
+            _changeArgs = new OnChangeEventArgs(_spectrumdata);
+            _process = new WASAPIPROC(Process);
 
             _timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(25)
+                Interval = TimeSpan.FromMilliseconds(TimerIntervalMs)
             };
-            _timer.Tick += timer_Tick;
-
-            _process = new WASAPIPROC(Process);
-
-            _spectrumdata = new List<byte>(_lines);
-            _bandEdges = BuildBandsUpper(_lines, _size);
-
-            // Reuse event args (removes per-tick allocation; same list reference as before)
-            _changeArgs = new OnChangeEventArgs(_spectrumdata);
+            _timer.Tick += TimerTick;
 
             _ = Bass.BASS_SetConfig(BASSConfig.BASS_CONFIG_UPDATETHREADS, false);
             _ = Bass.BASS_Init(-1, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
@@ -73,48 +69,41 @@ namespace Spectrum
             Enable(true);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int[] BuildBandsUpper(int lines, int size)
         {
             var upper = new int[lines];
+            var multiplier = 10.0 / (lines - 1);
+
             for (var x = 0; x < lines; x++)
             {
-                var b1 = (int)Math.Pow(2, x * 10.0 / (lines - 1));
-                if (b1 > size)
-                {
-                    b1 = size;
-                }
-
-                upper[x] = b1;
+                var b1 = (int)Math.Pow(2, x * multiplier);
+                upper[x] = Math.Min(b1, size);
             }
             return upper;
         }
 
         private List<Device> DeviceList()
         {
-            _devices = new List<Device>();
-
             var count = BassWasapi.BASS_WASAPI_GetDeviceCount();
+            _devices = new List<Device>(count);
 
             for (var i = 0; i < count; i++)
             {
                 var di = BassWasapi.BASS_WASAPI_GetDeviceInfo(i);
-
                 var flags = di.flags;
 
-                var isEnabled = (flags & BASSWASAPIDeviceInfo.BASS_DEVICE_ENABLED) != 0;
-                var isInput = (flags & BASSWASAPIDeviceInfo.BASS_DEVICE_INPUT) != 0;
-                var isLoopback = (flags & BASSWASAPIDeviceInfo.BASS_DEVICE_LOOPBACK) != 0;
-
-                if (isEnabled && isInput && isLoopback)
+                if ((flags & BASSWASAPIDeviceInfo.BASS_DEVICE_ENABLED) != 0 &&
+                    (flags & BASSWASAPIDeviceInfo.BASS_DEVICE_INPUT) != 0 &&
+                    (flags & BASSWASAPIDeviceInfo.BASS_DEVICE_LOOPBACK) != 0)
                 {
                     _devices.Add(new Device { Index = i, DeviceName = di.name });
                 }
             }
 
             // Prefer Headset, fallback to Speakers
-            var device =
-                _devices.FirstOrDefault(d => d.DeviceName.Contains("Headphones")) ??
-                _devices.FirstOrDefault(d => d.DeviceName.Contains("Speakers"));
+            var device = _devices.FirstOrDefault(d => d.DeviceName.Contains("Headphones"))
+                      ?? _devices.FirstOrDefault(d => d.DeviceName.Contains("Speakers"));
 
             if (device != null)
             {
@@ -131,7 +120,6 @@ namespace Spectrum
                 if (!_initialized)
                 {
                     _ = BassWasapi.BASS_WASAPI_GetDeviceInfo(SelectIndex);
-
                     _ = BassWasapi.BASS_WASAPI_Init(
                         SelectIndex,
                         0,
@@ -158,6 +146,7 @@ namespace Spectrum
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private int Process(IntPtr buffer, int length, IntPtr user) => length;
 
         public void Free()
@@ -166,55 +155,53 @@ namespace Spectrum
             _ = Bass.BASS_Free();
         }
 
-        private void timer_Tick(object sender, EventArgs e)
+        private void TimerTick(object sender, EventArgs e)
         {
             Array.Clear(_fft, 0, _fft.Length);
 
-            var ret = BassWasapi.BASS_WASAPI_GetData(
-                _fft,
-                (int)BASSData.BASS_DATA_FFT16384);
-
+            var ret = BassWasapi.BASS_WASAPI_GetData(_fft, (int)BASSData.BASS_DATA_FFT16384);
             if (ret < -1)
             {
                 return;
             }
 
+            ProcessFFTData();
+
+            var level = BassWasapi.BASS_WASAPI_GetLevel();
+            HandleDeviceHang(level);
+
+            _spectrumdata.Clear();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ProcessFFTData()
+        {
             var b0 = 0;
-            var size = _size;
-            var lines = _lines;
+            const int fftOffset = 1;
 
-            var fft = _fft;
-            var fftOffset = 1;
-            var bandsUpper = _bandEdges;
-            var spectrum = _spectrumdata;
-
-            for (var x = 0; x < lines; x++)
+            for (var x = 0; x < Lines; x++)
             {
-                var b1 = bandsUpper[x];
-                if (b1 > size)
-                {
-                    b1 = size;
-                }
-
+                var b1 = Math.Min(_bandEdges[x], Size);
                 if (b1 <= b0)
                 {
                     b1 = b0 + 1;
                 }
 
                 var sum = 0.0;
-                var n = 0;
+                var n = b1 - b0;
 
-                for (; b0 < b1; b0++)
+                for (var i = b0; i < b1; i++)
                 {
-                    var v = fft[fftOffset + b0];
+                    var v = _fft[fftOffset + i];
                     sum += v * v;
-                    n++;
                 }
 
+                b0 = b1;
+
                 var rms = n > 0 ? Math.Sqrt(sum / n) : 0.0;
+                var y = (int)((Math.Sqrt(rms) * RmsMultiplier) - RmsOffset);
 
-                var y = (int)((Math.Sqrt(rms) * 3 * 255) - 4);
-
+                // Clamp for .NET 4.8
                 if (y > 255)
                 {
                     y = 255;
@@ -225,36 +212,34 @@ namespace Spectrum
                     y = 0;
                 }
 
-                spectrum.Add((byte)y);
+                _spectrumdata.Add((byte)y);
             }
 
-            OnEventChange(_changeArgs);
+            OnChange?.Invoke(_sender, _changeArgs);
+        }
 
-            var level = BassWasapi.BASS_WASAPI_GetLevel();
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void HandleDeviceHang(int level)
+        {
             if (level == _lastlevel && level != 0)
             {
                 _hanctr++;
             }
+            else
+            {
+                _hanctr = 0;
+            }
 
             _lastlevel = level;
 
-            spectrum.Clear();
-
-            if (_hanctr > 3)
+            if (_hanctr > HangThreshold)
             {
                 _hanctr = 0;
                 Free();
-
                 _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
-
                 _initialized = false;
                 Enable(true);
             }
         }
-
-        private static readonly object _sender = new object();
-
-        public static void OnEventChange(OnChangeEventArgs e)
-            => OnChange?.Invoke(_sender, e);
     }
 }
