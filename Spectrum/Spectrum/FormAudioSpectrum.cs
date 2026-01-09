@@ -86,7 +86,7 @@ namespace Spectrum
 
             for (var i = 1; i <= barCount; i++)
             {
-                var mode = "Dots"; // Bricks, Dots, Center, Mirror
+                var mode = "Pulse"; // Bricks, Dots, Center, Mirror, Line, Wave, Gradient, Pulse, Spectrum
 
                 var progress = new VerticalProgressBar
                 {
@@ -106,26 +106,79 @@ namespace Spectrum
 
                 if (mode == "Bricks")
                 {
-                    progress.ResponseTimeMs = 28;
+                    progress.ResponseTimeMs = 26;
                     progress.SnapUpThreshold = 2;
-                    progress.PeakHoldMilliseconds = 280;
-                    progress.PeakDecayPerTick = 1.3f;
+                    progress.PeakHoldMilliseconds = 260;
+                    progress.PeakDecayPerTick = 1.25f;
                     progress.PeakLineThickness = 2;
                 }
                 else if (mode == "Dots")
                 {
-                    progress.ResponseTimeMs = 32;
+                    progress.ResponseTimeMs = 34;
                     progress.SnapUpThreshold = 3;
-                    progress.PeakHoldMilliseconds = 180;
-                    progress.PeakDecayPerTick = 1.15f;
-                    progress.PeakLineThickness = 2; // harmless; dots use dot size
+                    progress.PeakHoldMilliseconds = 170;
+                    progress.PeakDecayPerTick = 1.10f;
+                    progress.PeakLineThickness = 2; // dots use dot marker, thickness is harmless
                 }
-                else if (mode == "Center" || mode == "Mirror")
+                else if (mode == "Center")
                 {
+                    progress.ResponseTimeMs = 52;
+                    progress.SnapUpThreshold = 5;
+                    progress.PeakHoldMilliseconds = 0; // ignored by Center/Mirror peak rules
+                    progress.PeakDecayPerTick = 1.0f;  // ignored
+                    progress.PeakLineThickness = 2;
+                }
+                else if (mode == "Mirror")
+                {
+                    progress.ResponseTimeMs = 48;
+                    progress.SnapUpThreshold = 5;
+                    progress.PeakHoldMilliseconds = 0; // ignored
+                    progress.PeakDecayPerTick = 1.0f;  // ignored
+                    progress.PeakLineThickness = 2;
+                }
+                else if (mode == "Line")
+                {
+                    // super readable, "meter" feel
+                    progress.ResponseTimeMs = 22;
+                    progress.SnapUpThreshold = 2;
+                    progress.PeakHoldMilliseconds = 220;
+                    progress.PeakDecayPerTick = 1.20f;
+                    progress.PeakLineThickness = 2;
+                }
+                else if (mode == "Gradient")
+                {
+                    // smooth but still quick; gradients look best without micro jitter
+                    progress.ResponseTimeMs = 30;
+                    progress.SnapUpThreshold = 2;
+                    progress.PeakHoldMilliseconds = 240;
+                    progress.PeakDecayPerTick = 1.15f;
+                    progress.PeakLineThickness = 2;
+                }
+                else if (mode == "Wave")
+                {
+                    // wave should be "musical", not twitchy
                     progress.ResponseTimeMs = 40;
+                    progress.SnapUpThreshold = 3;
+                    progress.PeakHoldMilliseconds = 190;
+                    progress.PeakDecayPerTick = 1.05f;
+                    progress.PeakLineThickness = 2;
+                }
+                else if (mode == "Pulse")
+                {
+                    // pulse is an "energy" look: slower response so it breathes
+                    progress.ResponseTimeMs = 60;
                     progress.SnapUpThreshold = 4;
-                    progress.PeakHoldMilliseconds = 0; // just clarity (ignored)
-                    progress.PeakDecayPerTick = 1.0f;  // just clarity (ignored)
+                    progress.PeakHoldMilliseconds = 160;
+                    progress.PeakDecayPerTick = 0.95f;
+                    progress.PeakLineThickness = 2;
+                }
+                else if (mode == "Spectrum")
+                {
+                    // spectrum should feel like a real analyzer column (fast attack, longer hold)
+                    progress.ResponseTimeMs = 24;
+                    progress.SnapUpThreshold = 2;
+                    progress.PeakHoldMilliseconds = 300;
+                    progress.PeakDecayPerTick = 1.20f;
                     progress.PeakLineThickness = 2;
                 }
 

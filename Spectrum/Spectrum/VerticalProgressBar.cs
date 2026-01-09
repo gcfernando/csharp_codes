@@ -8,7 +8,7 @@ using System.Windows.Forms;
 
 namespace Spectrum
 {
-    // Developer : Gehan Fernando
+    // Developer : Gehan Fernando Extended modes + performance-safe drawing: GPT-5.2 Thinking edition
 
     [Description("Vertical spectrum-style progress bar optimized for real-time updates")]
     [Category("VerticalProgressBar")]
@@ -52,13 +52,33 @@ namespace Spectrum
         private readonly SolidBrush _peakBrush = new SolidBrush(Color.White);
         private Color _cachedPeakColor = Color.Empty;
 
+        // Reusable pen for "Line/Wave" modes
+        private readonly Pen _linePen = new Pen(Color.Lime, 2f);
+        private Color _cachedLineColor = Color.Empty;
+        private float _cachedLineWidth = -1f;
+
+        // Cached gradient brush for Gradient mode (avoid per-frame alloc)
+        private LinearGradientBrush _gradientBrush;
+        private Rectangle _cachedGradientRect;
+        private bool _gradientDirty = true;
+
+        // Wave points cache (avoid per-frame alloc)
+        private readonly Point[] _wavePoints = new Point[96]; // fixed capacity; we use only part
+
         // ========================= Visualization (NO new public properties) =========================
         private enum VisualizationMode
         {
             Bricks,
             Dots,
             Center,
-            Mirror
+            Mirror,
+
+            // Added
+            Line,
+            Wave,
+            Gradient,
+            Pulse,
+            Spectrum
         }
 
         // Cached Tag -> mode (no parsing every tick)
@@ -94,7 +114,7 @@ namespace Spectrum
 
             tagText = tagText.Trim();
 
-            // fast path (no ToLowerInvariant alloc)
+            // fast paths (avoid ToLowerInvariant alloc when possible)
             if (tagText == "Bricks" || tagText == "LED" || tagText == "Led" || tagText == "bricks" || tagText == "led")
             {
                 return VisualizationMode.Bricks;
@@ -115,6 +135,31 @@ namespace Spectrum
                 return VisualizationMode.Mirror;
             }
 
+            if (tagText == "Line" || tagText == "line")
+            {
+                return VisualizationMode.Line;
+            }
+
+            if (tagText == "Wave" || tagText == "wave")
+            {
+                return VisualizationMode.Wave;
+            }
+
+            if (tagText == "Gradient" || tagText == "gradient")
+            {
+                return VisualizationMode.Gradient;
+            }
+
+            if (tagText == "Pulse" || tagText == "pulse")
+            {
+                return VisualizationMode.Pulse;
+            }
+
+            if (tagText == "Spectrum" || tagText == "spectrum")
+            {
+                return VisualizationMode.Spectrum;
+            }
+
             // fallback
             tagText = tagText.ToLowerInvariant();
             switch (tagText)
@@ -128,6 +173,16 @@ namespace Spectrum
                     return VisualizationMode.Center;
                 case "mirror":
                     return VisualizationMode.Mirror;
+                case "line":
+                    return VisualizationMode.Line;
+                case "wave":
+                    return VisualizationMode.Wave;
+                case "gradient":
+                    return VisualizationMode.Gradient;
+                case "pulse":
+                    return VisualizationMode.Pulse;
+                case "spectrum":
+                    return VisualizationMode.Spectrum;
                 default:
                     return VisualizationMode.Bricks;
             }
@@ -136,8 +191,9 @@ namespace Spectrum
         private static bool ModeSnapsDown(VisualizationMode mode)
             => mode == VisualizationMode.Center || mode == VisualizationMode.Mirror;
 
+        // Peak marker makes sense for typical level displays; keep it for all except Center/Mirror.
         private static bool ModeHasPeakMarker(VisualizationMode mode)
-            => mode == VisualizationMode.Bricks || mode == VisualizationMode.Dots;
+            => mode != VisualizationMode.Center && mode != VisualizationMode.Mirror;
 
         // ========================= Appearance - bricks =========================
         [Category("Appearance")]
@@ -180,7 +236,7 @@ namespace Spectrum
         public bool HeatmapEnabled
         {
             get => _heatmapEnabled;
-            set { _heatmapEnabled = value; _colorsDirty = true; Invalidate(); }
+            set { _heatmapEnabled = value; _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private bool _heatmapEnabled = true;
 
@@ -189,7 +245,7 @@ namespace Spectrum
         public Color HeatLowColor
         {
             get => _heatLowColor;
-            set { _heatLowColor = value; _colorsDirty = true; Invalidate(); }
+            set { _heatLowColor = value; _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private Color _heatLowColor = Color.FromArgb(0, 255, 80);
 
@@ -198,7 +254,7 @@ namespace Spectrum
         public Color HeatMidColor
         {
             get => _heatMidColor;
-            set { _heatMidColor = value; _colorsDirty = true; Invalidate(); }
+            set { _heatMidColor = value; _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private Color _heatMidColor = Color.FromArgb(255, 235, 0);
 
@@ -207,7 +263,7 @@ namespace Spectrum
         public Color HeatHighColor
         {
             get => _heatHighColor;
-            set { _heatHighColor = value; _colorsDirty = true; Invalidate(); }
+            set { _heatHighColor = value; _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private Color _heatHighColor = Color.FromArgb(255, 140, 0);
 
@@ -216,7 +272,7 @@ namespace Spectrum
         public Color HeatPeakColor
         {
             get => _heatPeakColor;
-            set { _heatPeakColor = value; _colorsDirty = true; Invalidate(); }
+            set { _heatPeakColor = value; _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private Color _heatPeakColor = Color.Red;
 
@@ -225,7 +281,7 @@ namespace Spectrum
         public float HeatIntensityCurve
         {
             get => _heatCurve;
-            set { _heatCurve = Math.Max(0.15f, value); _colorsDirty = true; Invalidate(); }
+            set { _heatCurve = Math.Max(0.15f, value); _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private float _heatCurve = 1.6f;
 
@@ -234,7 +290,7 @@ namespace Spectrum
         public bool TopEmphasisEnabled
         {
             get => _topEmphasisEnabled;
-            set { _topEmphasisEnabled = value; _colorsDirty = true; Invalidate(); }
+            set { _topEmphasisEnabled = value; _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private bool _topEmphasisEnabled = true;
 
@@ -243,7 +299,7 @@ namespace Spectrum
         public float TopEmphasisStart
         {
             get => _topEmphasisStart;
-            set { _topEmphasisStart = Clamp01(value); _colorsDirty = true; Invalidate(); }
+            set { _topEmphasisStart = Clamp01(value); _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private float _topEmphasisStart = 0.85f;
 
@@ -252,7 +308,7 @@ namespace Spectrum
         public float TopEmphasisStrength
         {
             get => _topEmphasisStrength;
-            set { _topEmphasisStrength = Clamp01(value); _colorsDirty = true; Invalidate(); }
+            set { _topEmphasisStrength = Clamp01(value); _colorsDirty = true; _gradientDirty = true; Invalidate(); }
         }
         private float _topEmphasisStrength = 0.45f;
 
@@ -335,6 +391,9 @@ namespace Spectrum
 
                 _workBrush?.Dispose();
                 _brickShadeBrush?.Dispose();
+
+                _linePen?.Dispose();
+                _gradientBrush?.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -351,6 +410,7 @@ namespace Spectrum
         {
             base.OnForeColorChanged(e);
             _colorsDirty = true;
+            _gradientDirty = true;
             Invalidate();
         }
 
@@ -360,6 +420,7 @@ namespace Spectrum
             _cachedWidth = -1;
             _cachedHeight = -1;
             _colorsDirty = true;
+            _gradientDirty = true;
             Invalidate();
         }
 
@@ -437,29 +498,49 @@ namespace Spectrum
 
             var mode = GetVisualizationModeCached();
 
-            switch (mode)
+            // NO "break logic": use if/else with early return semantics
+            if (mode == VisualizationMode.Bricks)
             {
-                case VisualizationMode.Bricks:
-                    DrawMode_Bricks(e.Graphics, bounds, topLimit);
-                    break;
-
-                case VisualizationMode.Dots:
-                    DrawMode_Dots(e.Graphics, bounds, topLimit);
-                    break;
-
-                case VisualizationMode.Center:
-                    DrawMode_Center(e.Graphics, innerX, innerW, topInner, innerH, fillPercent);
-                    break;
-
-                case VisualizationMode.Mirror:
-                    DrawMode_Mirror(e.Graphics, innerX, innerW, topInner, innerH, fillPercent);
-                    break;
+                DrawMode_Bricks(e.Graphics, bounds, topLimit);
+            }
+            else if (mode == VisualizationMode.Dots)
+            {
+                DrawMode_Dots(e.Graphics, bounds, topLimit);
+            }
+            else if (mode == VisualizationMode.Center)
+            {
+                DrawMode_Center(e.Graphics, innerX, innerW, topInner, innerH, fillPercent);
+            }
+            else if (mode == VisualizationMode.Mirror)
+            {
+                DrawMode_Mirror(e.Graphics, innerX, innerW, topInner, innerH, fillPercent);
+            }
+            else if (mode == VisualizationMode.Line)
+            {
+                DrawMode_Line(e.Graphics, innerX, innerW, topInner, bottomInner, innerH, fillPercent);
+            }
+            else if (mode == VisualizationMode.Wave)
+            {
+                DrawMode_Wave(e.Graphics, innerX, innerW, topInner, bottomInner, innerH, fillPercent);
+            }
+            else if (mode == VisualizationMode.Gradient)
+            {
+                DrawMode_Gradient(e.Graphics, innerX, innerW, topInner, bottomInner, innerH, fillPercent);
+            }
+            else if (mode == VisualizationMode.Pulse)
+            {
+                DrawMode_Pulse(e.Graphics, bounds, topLimit, fillPercent);
+            }
+            else // Spectrum
+            {
+                DrawMode_Spectrum(e.Graphics, bounds, topLimit, fillPercent);
             }
 
             if (PeakHoldEnabled && ModeHasPeakMarker(mode))
             {
                 EnsurePeakBrushUpToDate();
 
+                // Dots mode uses dot marker; everything else uses line marker (including Line/Wave/Gradient/Pulse/Spectrum)
                 if (mode == VisualizationMode.Dots)
                 {
                     DrawPeakMarker_Dot(e.Graphics, bounds, innerX, innerW, topInner, bottomInner, innerH, range);
@@ -632,6 +713,342 @@ namespace Spectrum
             g.FillRectangle(_workBrush, new Rectangle(innerX, topInner, innerW, innerH));
         }
 
+        // ========================= NEW: Mode Draw: Line ========================= Music-style
+        // solid column, ultra fast, looks clean at high FPS.
+        private void DrawMode_Line(Graphics g, int innerX, int innerW, int topInner, int bottomInner, int innerH, float fillPercent)
+        {
+            // faint track
+            _workBrush.Color = Color.FromArgb(22, 255, 255, 255);
+            g.FillRectangle(_workBrush, new Rectangle(innerX, topInner, innerW, innerH));
+
+            var filledH = (int)Math.Round(innerH * fillPercent);
+            if (filledH <= 0)
+            {
+                return;
+            }
+
+            var fillRect = new Rectangle(innerX, bottomInner - filledH, innerW, filledH);
+
+            _workBrush.Color = GetLevelColor(fillPercent);
+            g.FillRectangle(_workBrush, fillRect);
+
+            EnsureLinePenUpToDate(fillPercent, 2f);
+
+            // edge line for crispness
+            g.DrawRectangle(_linePen, fillRect.X, fillRect.Y, fillRect.Width - 1, fillRect.Height - 1);
+        }
+
+        // ========================= NEW: Mode Draw: Gradient ========================= Full-height
+        // heat gradient masked by current level (classic meter feel).
+        private void DrawMode_Gradient(Graphics g, int innerX, int innerW, int topInner, int bottomInner, int innerH, float fillPercent)
+        {
+            var fullRect = new Rectangle(innerX, topInner, innerW, innerH);
+
+            // faint track
+            _workBrush.Color = Color.FromArgb(18, 255, 255, 255);
+            g.FillRectangle(_workBrush, fullRect);
+
+            var filledH = (int)Math.Round(innerH * fillPercent);
+            if (filledH <= 0)
+            {
+                return;
+            }
+
+            var fillRect = new Rectangle(innerX, bottomInner - filledH, innerW, filledH);
+
+            EnsureGradientBrush(fullRect);
+            g.FillRectangle(_gradientBrush, fillRect);
+
+            // subtle shade cap (top of the fill) like a "glow"
+            if (filledH >= 3)
+            {
+                _workBrush.Color = Color.FromArgb(45, 255, 255, 255);
+                g.FillRectangle(_workBrush, new Rectangle(fillRect.X, fillRect.Y, fillRect.Width, 2));
+            }
+        }
+
+        private void EnsureGradientBrush(Rectangle fullRect)
+        {
+            if (!_gradientDirty &&
+                _gradientBrush != null &&
+                _cachedGradientRect == fullRect)
+            {
+                return;
+            }
+
+            _gradientDirty = false;
+            _cachedGradientRect = fullRect;
+
+            _gradientBrush?.Dispose();
+
+            // NOTE: LinearGradientBrush goes Top->Bottom; we want bottom=low, top=peak. We'll build
+            // with blend positions to approximate your HSV heat curve zones.
+            var topColor = HeatmapEnabled ? HeatPeakColor : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
+            var bottomColor = HeatmapEnabled ? HeatLowColor : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
+
+            _gradientBrush = new LinearGradientBrush(fullRect, topColor, bottomColor, LinearGradientMode.Vertical);
+
+            if (!HeatmapEnabled)
+            {
+                return;
+            }
+
+            // 4-point blend: top(peak), high, mid, bottom(low) positions are normalized from 0(top)
+            // to 1(bottom)
+            var cb = new ColorBlend(4)
+            {
+                Colors = new[]
+                {
+                    HeatPeakColor,
+                    HeatHighColor,
+                    HeatMidColor,
+                    HeatLowColor
+                },
+                Positions = new[]
+                {
+                    0.00f,
+                    0.18f,  // roughly your 0.82..1 top zone squeezed near top
+                    0.45f,  // mid zone
+                    1.00f
+                }
+            };
+
+            // Top emphasis: push more red/orange near the top (still no per-frame)
+            if (TopEmphasisEnabled)
+            {
+                // shift peak dominance a bit lower
+                cb.Positions[1] = Clamp01(0.10f + (0.12f * (1f - TopEmphasisStart)));
+            }
+
+            _gradientBrush.InterpolationColors = cb;
+        }
+
+        // ========================= NEW: Mode Draw: Wave ========================= Musician feel:
+        // animated waveform inside the filled area, fast polyline, no allocations.
+        private void DrawMode_Wave(Graphics g, int innerX, int innerW, int topInner, int bottomInner, int innerH, float fillPercent)
+        {
+            // faint track
+            _workBrush.Color = Color.FromArgb(18, 255, 255, 255);
+            g.FillRectangle(_workBrush, new Rectangle(innerX, topInner, innerW, innerH));
+
+            var filledH = (int)Math.Round(innerH * fillPercent);
+            if (filledH <= 0)
+            {
+                return;
+            }
+
+            var fillRect = new Rectangle(innerX, bottomInner - filledH, innerW, filledH);
+
+            // base fill (dim) so wave reads well
+            var baseColor = GetLevelColor(fillPercent);
+            _workBrush.Color = Color.FromArgb(120, baseColor.R, baseColor.G, baseColor.B);
+            g.FillRectangle(_workBrush, fillRect);
+
+            // waveform line
+            var t = (float)_stopwatch.Elapsed.TotalSeconds;
+
+            // amplitude scales with width and level (nice musical behavior)
+            var amp = Math.Max(1f, innerW * 0.22f * (0.25f + (0.75f * fillPercent)));
+            var freq = 2.2f; // cycles per second
+            var phase = t * (float)(Math.PI * 2) * freq;
+
+            // number of points (cap by fixed array length)
+            var points = Math.Min(_wavePoints.Length, Math.Max(12, fillRect.Height / 4));
+            var midX = innerX + (innerW / 2);
+
+            // step along Y (top->bottom)
+            var stepY = points <= 1 ? 1 : (float)fillRect.Height / (points - 1);
+            for (var i = 0; i < points; i++)
+            {
+                var y = fillRect.Y + (int)Math.Round(i * stepY);
+                var yy01 = fillRect.Height <= 1 ? 0f : (float)i / (points - 1); // 0 top..1 bottom
+
+                // stronger wiggle near the top (like harmonics lighting up)
+                var localAmp = amp * (0.35f + (0.65f * (1f - yy01)));
+
+                var x = midX + (int)Math.Round(((float)Math.Sin(phase + (yy01 * 6.0f))) * localAmp);
+                if (x < innerX)
+                {
+                    x = innerX;
+                }
+
+                if (x > innerX + innerW - 1)
+                {
+                    x = innerX + innerW - 1;
+                }
+
+                _wavePoints[i] = new Point(x, y);
+            }
+
+            EnsureLinePenUpToDate(fillPercent, 2.2f);
+
+            // draw waveform
+            if (points >= 2)
+            {
+                for (var i = 1; i < points; i++)
+                {
+                    g.DrawLine(_linePen, _wavePoints[i - 1], _wavePoints[i]);
+                }
+            }
+        }
+
+        // ========================= NEW: Mode Draw: Pulse ========================= Bricks with
+        // time-based "breathing" intensity; still cached geometry/colors.
+        private void DrawMode_Pulse(Graphics g, Rectangle bounds, int topLimit, float fillPercent)
+        {
+            EnsureBrickGeometry(bounds);
+            if (_colorsDirty)
+            {
+                RebuildBrickHeatColors();
+            }
+
+            var t = (float)_stopwatch.Elapsed.TotalSeconds;
+
+            // musically nice: pulse rate increases slightly with level
+            var rate = 1.2f + (2.2f * fillPercent);
+            var pulse = 0.55f + (0.45f * (float)Math.Sin(t * (float)(Math.PI * 2.0) * rate));
+            pulse = Clamp01(pulse);
+
+            for (var i = 0; i < _brickRects.Count; i++)
+            {
+                var brickRect = _brickRects[i];
+                var isActive = brickRect.Top >= topLimit;
+
+                if (isActive)
+                {
+                    var c = HeatmapEnabled ? _brickHeatColors[i] : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
+
+                    // pulse as brightness via alpha mix toward white (fast RGB lerp)
+                    var strength = 0.10f + (0.35f * pulse);
+                    var cp = LerpRgb(c, Color.White, strength);
+
+                    _workBrush.Color = cp;
+                    g.FillRectangle(_workBrush, brickRect);
+
+                    if (brickRect.Height >= 3)
+                    {
+                        var shadeRect = new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2);
+                        g.FillRectangle(_brickShadeBrush, shadeRect);
+                    }
+
+                    if (BrickHighlight && _brickHighlightBrush != null && brickRect.Height >= 5)
+                    {
+                        g.FillRectangle(_brickHighlightBrush,
+                            brickRect.X + 1,
+                            brickRect.Y + 3,
+                            Math.Max(1, brickRect.Width - 2),
+                            1);
+                    }
+                }
+                else
+                {
+                    _workBrush.Color = Color.FromArgb(22, 255, 255, 255);
+                    g.FillRectangle(_workBrush, brickRect);
+                }
+            }
+        }
+
+        // ========================= NEW: Mode Draw: Spectrum ========================= “Spectrum
+        // analyzer” feel: bricks + stronger top glow + cleaner inactive base.
+        private void DrawMode_Spectrum(Graphics g, Rectangle bounds, int topLimit, float fillPercent)
+        {
+            EnsureBrickGeometry(bounds);
+            if (_colorsDirty)
+            {
+                RebuildBrickHeatColors();
+            }
+
+            // Slightly stronger inactive background than Bricks so it reads like a spectrum column
+            for (var i = 0; i < _brickRects.Count; i++)
+            {
+                var brickRect = _brickRects[i];
+                var isActive = brickRect.Top >= topLimit;
+
+                if (isActive)
+                {
+                    var c = HeatmapEnabled ? _brickHeatColors[i] : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
+
+                    // Extra "spectrum" pop in the top band
+                    var tt = _brickT[i]; // 0 bottom -> 1 top
+                    if (TopEmphasisEnabled && tt >= TopEmphasisStart)
+                    {
+                        var u = (tt - TopEmphasisStart) / Math.Max(0.0001f, 1f - TopEmphasisStart);
+                        var boost = 0.10f + (0.25f * u);
+                        c = LerpRgb(c, HeatPeakColor, Clamp01(boost));
+                    }
+
+                    _workBrush.Color = c;
+                    g.FillRectangle(_workBrush, brickRect);
+
+                    // inner shade
+                    if (brickRect.Height >= 3)
+                    {
+                        var shadeRect = new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2);
+                        g.FillRectangle(_brickShadeBrush, shadeRect);
+                    }
+
+                    // glow line for top-ish bricks (cheap, looks good)
+                    if (tt > 0.72f && brickRect.Height >= 4)
+                    {
+                        _workBrush.Color = Color.FromArgb(60, 255, 255, 255);
+                        g.FillRectangle(_workBrush, new Rectangle(brickRect.X + 1, brickRect.Y + 1, Math.Max(1, brickRect.Width - 2), 1));
+                    }
+
+                    if (BrickHighlight && _brickHighlightBrush != null && brickRect.Height >= 5)
+                    {
+                        g.FillRectangle(_brickHighlightBrush,
+                            brickRect.X + 1,
+                            brickRect.Y + 3,
+                            Math.Max(1, brickRect.Width - 2),
+                            1);
+                    }
+                }
+                else
+                {
+                    // spectrum-style "grid" background
+                    _workBrush.Color = Color.FromArgb(16, 255, 255, 255);
+                    g.FillRectangle(_workBrush, brickRect);
+                }
+            }
+
+            // subtle overall gloss proportional to level (no extra objects)
+            if (fillPercent > 0.01f)
+            {
+                var pad = BrickPadding;
+                var innerX = bounds.X + pad;
+                var innerW = bounds.Width - (pad * 2);
+                var top = bounds.Top + pad;
+                var bottom = bounds.Bottom - pad;
+                var innerH = Math.Max(1, bottom - top);
+                var filledH = (int)Math.Round(innerH * fillPercent);
+                var fillRect = new Rectangle(innerX, bottom - filledH, innerW, filledH);
+
+                _workBrush.Color = Color.FromArgb((int)(18 + (30 * fillPercent)), 255, 255, 255);
+                if (fillRect.Height >= 6)
+                {
+                    g.FillRectangle(_workBrush, new Rectangle(fillRect.X, fillRect.Y, fillRect.Width, 2));
+                }
+            }
+        }
+
+        private void EnsureLinePenUpToDate(float level01, float width)
+        {
+            var c = GetLevelColor(level01);
+
+            if (_cachedLineColor != c || Math.Abs(_cachedLineWidth - width) > 0.001f)
+            {
+                _cachedLineColor = c;
+                _cachedLineWidth = width;
+                _linePen.Color = c;
+                _linePen.Width = width;
+
+                // square caps are faster and crisp; round looks nicer if HQ, but keep it stable
+                _linePen.StartCap = LineCap.Square;
+                _linePen.EndCap = LineCap.Square;
+                _linePen.LineJoin = LineJoin.Miter;
+            }
+        }
+
         // ========================= Peak markers =========================
         private void EnsurePeakBrushUpToDate()
         {
@@ -743,6 +1160,7 @@ namespace Spectrum
             }
 
             _colorsDirty = true;
+            _gradientDirty = true;
         }
 
         private void RebuildBrickHeatColors()
@@ -875,8 +1293,7 @@ namespace Spectrum
                 return;
             }
 
-            // ✅ MUSICIAN-GRADE: time-based decay (smooth at any FPS) PeakDecayPerTick means "decay
-            // per 60fps tick" (keeps your existing tuning valid).
+            // time-based decay (smooth at any FPS); PeakDecayPerTick tuned for 60fps
             var decayPer60FpsTick = Math.Max(0.01f, PeakDecayPerTick);
             var decayScale = intervalMs / (1000f / 60f);   // 1.0 at 60fps
             var decayAmount = decayPer60FpsTick * decayScale;
