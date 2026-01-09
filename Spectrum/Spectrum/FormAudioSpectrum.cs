@@ -91,7 +91,7 @@ namespace Spectrum
                     BackColor = Color.FromArgb(50, 50, 50),
                     Maximum = 255,
                     Name = $"ProgressBar_{i:00}",
-                    Tag = i.ToString(),
+                    Tag = $"Center|{i}", // Bricks, Dots, Center, Mirror
                     Size = new Size(14, 320),
                     Location = new Point(basePoint, 50),
                     Visible = true,

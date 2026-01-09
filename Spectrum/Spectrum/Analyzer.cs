@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Windows.Threading;
 
@@ -107,8 +108,17 @@ namespace Spectrum
                 if (isEnabled && isInput && isLoopback)
                 {
                     _devices.Add(new Device { Index = i, DeviceName = di.name });
-                    SelectIndex = i;
                 }
+            }
+
+            // Prefer Headset, fallback to Speakers
+            var device =
+                _devices.FirstOrDefault(d => d.DeviceName.Contains("Headphones")) ??
+                _devices.FirstOrDefault(d => d.DeviceName.Contains("Speakers"));
+
+            if (device != null)
+            {
+                SelectIndex = device.Index;
             }
 
             return _devices;
