@@ -28,11 +28,11 @@ namespace Spectrum
         private volatile int _targetValue;
         private float _displayValue;
 
-        // Peak hold (visual)
+        // Peak hold
         private float _peakValue;
         private float _peakHoldLeftMs;
 
-        // ========================= Cached geometry + colors (performance) =========================
+        // ========================= Cached geometry + colors =========================
         private readonly List<Rectangle> _brickRects = new List<Rectangle>(256);
         private readonly List<float> _brickT = new List<float>(256);          // 0 bottom -> 1 top
         private readonly List<Color> _brickHeatColors = new List<Color>(256); // cached heat colors
@@ -41,74 +41,95 @@ namespace Spectrum
         private int _cachedHeight = -1;
         private bool _colorsDirty = true;
 
-        // Reusable GDI objects (no per-frame allocations)
+        // ========================= Reusable GDI objects =========================
         private SolidBrush _backgroundBrush;
         private readonly SolidBrush _workBrush = new SolidBrush(Color.Black);
         private readonly SolidBrush _brickShadeBrush = new SolidBrush(Color.FromArgb(65, 0, 0, 0));
         private SolidBrush _brickHighlightBrush;
         private readonly Pen _borderPen = new Pen(Color.FromArgb(120, 0, 0, 0), 1f);
 
+        // Peak marker brush (no per-frame alloc)
+        private readonly SolidBrush _peakBrush = new SolidBrush(Color.White);
+        private Color _cachedPeakColor = Color.Empty;
+
         // ========================= Visualization (NO new public properties) =========================
-        // Removed: Solid, Neon, Glow, Wave
-        // Kept: Bricks, Dots, Center, Mirror
-        //
-        // Behavior requirements:
-        // - Bricks: keep exactly as original behavior.
-        // - Dots: keep falling part (normal smoothing). Peak marker must be a DOT (same size as dots).
-        // - Center/Mirror: remove falling part (when value decreases, snap down immediately). Also
-        // remove peak marker.
-        //
-        // Selection via Tag: Tag="Bricks" / "Dots" / "Center" / "Mirror" You may also use
-        // "Mode|Index" like: "Dots|12" (mode is parsed before '|').
         private enum VisualizationMode
         {
-            Bricks,   // classic LED bricks (original)
-            Dots,     // round LEDs (peak marker is a dot)
-            Center,   // fills from center (no falling + no peak marker)
-            Mirror    // fills top+bottom (no falling + no peak marker)
+            Bricks,
+            Dots,
+            Center,
+            Mirror
         }
 
-        private VisualizationMode GetVisualizationMode()
+        // Cached Tag -> mode (no parsing every tick)
+        private object _cachedTagObject;
+        private string _cachedTagText;
+        private VisualizationMode _cachedMode = VisualizationMode.Bricks;
+
+        private VisualizationMode GetVisualizationModeCached()
         {
-            try
+            var tagObj = Tag;
+            if (!ReferenceEquals(tagObj, _cachedTagObject))
             {
-                var tagText = Tag?.ToString();
-                if (string.IsNullOrWhiteSpace(tagText))
-                {
-                    return VisualizationMode.Bricks;
-                }
-
-                // allow "Mode|Index"
-                var pipeIndex = tagText.IndexOf('|');
-                if (pipeIndex >= 0)
-                {
-                    tagText = tagText.Substring(0, pipeIndex);
-                }
-
-                tagText = tagText.Trim().ToLowerInvariant();
-
-                switch (tagText)
-                {
-                    case "bricks":
-                    case "led":
-                        return VisualizationMode.Bricks;
-
-                    case "dots":
-                        return VisualizationMode.Dots;
-
-                    case "center":
-                        return VisualizationMode.Center;
-
-                    case "mirror":
-                        return VisualizationMode.Mirror;
-
-                    default:
-                        return VisualizationMode.Bricks;
-                }
+                _cachedTagObject = tagObj;
+                _cachedTagText = tagObj?.ToString();
+                _cachedMode = ParseVisualizationMode(_cachedTagText);
             }
-            catch
+            return _cachedMode;
+        }
+
+        private static VisualizationMode ParseVisualizationMode(string tagText)
+        {
+            if (string.IsNullOrWhiteSpace(tagText))
             {
                 return VisualizationMode.Bricks;
+            }
+
+            // allow "Mode|Index"
+            var pipeIndex = tagText.IndexOf('|');
+            if (pipeIndex >= 0)
+            {
+                tagText = tagText.Substring(0, pipeIndex);
+            }
+
+            tagText = tagText.Trim();
+
+            // fast path (no ToLowerInvariant alloc)
+            if (tagText == "Bricks" || tagText == "LED" || tagText == "Led" || tagText == "bricks" || tagText == "led")
+            {
+                return VisualizationMode.Bricks;
+            }
+
+            if (tagText == "Dots" || tagText == "dots")
+            {
+                return VisualizationMode.Dots;
+            }
+
+            if (tagText == "Center" || tagText == "center")
+            {
+                return VisualizationMode.Center;
+            }
+
+            if (tagText == "Mirror" || tagText == "mirror")
+            {
+                return VisualizationMode.Mirror;
+            }
+
+            // fallback
+            tagText = tagText.ToLowerInvariant();
+            switch (tagText)
+            {
+                case "bricks":
+                case "led":
+                    return VisualizationMode.Bricks;
+                case "dots":
+                    return VisualizationMode.Dots;
+                case "center":
+                    return VisualizationMode.Center;
+                case "mirror":
+                    return VisualizationMode.Mirror;
+                default:
+                    return VisualizationMode.Bricks;
             }
         }
 
@@ -153,7 +174,7 @@ namespace Spectrum
         [Description("High quality rendering (anti-alias / high quality). Turn OFF for max FPS.")]
         public bool HighQualityRendering { get; set; } = false;
 
-        // ========================= Heatmap (better gradient + RED at top) =========================
+        // ========================= Heatmap =========================
         [Category("Heatmap")]
         [Description("Enable heatmap coloring (green -> yellow -> orange -> red).")]
         public bool HeatmapEnabled
@@ -208,7 +229,6 @@ namespace Spectrum
         }
         private float _heatCurve = 1.6f;
 
-        // ===== Visual only: Top red emphasis zone =====
         [Category("Heatmap")]
         [Description("Enable a stronger emphasis for the top zone (more 'spectrum-like').")]
         public bool TopEmphasisEnabled
@@ -236,9 +256,9 @@ namespace Spectrum
         }
         private float _topEmphasisStrength = 0.45f;
 
-        // ========================= Peak hold (kept / compatible names) =========================
+        // ========================= Peak hold =========================
         [Category("Peak Hold")]
-        [Description("Enable peak hold marker line.")]
+        [Description("Enable peak hold marker line/dot.")]
         public bool PeakHoldEnabled { get; set; } = true;
 
         [Category("Peak Hold")]
@@ -246,18 +266,18 @@ namespace Spectrum
         public int PeakHoldMilliseconds { get; set; } = 140;
 
         [Category("Peak Hold")]
-        [Description("Peak decay per tick.")]
+        [Description("Peak decay per 60fps tick (kept for compatibility).")]
         public float PeakDecayPerTick { get; set; } = 1.2f;
 
         [Category("Peak Hold")]
-        [Description("Peak marker thickness in pixels.")]
+        [Description("Peak marker thickness in pixels (line mode).")]
         public int PeakLineThickness { get; set; } = 2;
 
         [Category("Peak Hold")]
         [Description("Peak marker color.")]
         public Color PeakLineColor { get; set; } = Color.FromArgb(255, 255, 255);
 
-        // ========================= Performance / Real-time update tuning =========================
+        // ========================= Performance =========================
         [Category("Performance")]
         [Description("Shared animation FPS (15..240). Default 60.")]
         public int AnimationFps
@@ -272,11 +292,11 @@ namespace Spectrum
         private int _animationFps = 60;
 
         [Category("Performance")]
-        [Description("Response time in ms. Lower = snappier, less lag. Typical: 30..80.")]
+        [Description("Response time in ms. Lower = snappier, less lag. Typical: 20..70.")]
         public int ResponseTimeMs { get; set; } = 45;
 
         [Category("Performance")]
-        [Description("If target jumps up more than this many units, snap immediately (reduces perceived lag). 0 disables.")]
+        [Description("If target jumps up more than this many units, snap immediately. 0 disables.")]
         public int SnapUpThreshold { get; set; } = 6;
 
         // ========================= ctor / dispose =========================
@@ -309,10 +329,12 @@ namespace Spectrum
                 UnregisterInstance();
 
                 _backgroundBrush?.Dispose();
-                _workBrush?.Dispose();
-                _brickShadeBrush?.Dispose();
                 _brickHighlightBrush?.Dispose();
                 _borderPen?.Dispose();
+                _peakBrush?.Dispose();
+
+                _workBrush?.Dispose();
+                _brickShadeBrush?.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -341,7 +363,7 @@ namespace Spectrum
             Invalidate();
         }
 
-        // keep base.Value usable; we treat it as "target"
+        // Keep base.Value usable; treat it as "target"
         public new int Value
         {
             get => base.Value;
@@ -388,28 +410,11 @@ namespace Spectrum
                 return;
             }
 
-            if (HighQualityRendering)
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                e.Graphics.CompositingQuality = CompositingQuality.HighQuality;
-                e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            }
-            else
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.None;
-                e.Graphics.PixelOffsetMode = PixelOffsetMode.None;
-                e.Graphics.CompositingQuality = CompositingQuality.HighSpeed;
-                e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
-            }
+            ConfigureGraphicsQuality(e.Graphics);
 
             // Background + border
             e.Graphics.FillRectangle(_backgroundBrush, bounds);
             e.Graphics.DrawRectangle(_borderPen, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
-
-            // Precompute fill geometry
-            float range = Math.Max(1, Maximum - Minimum);
-            var fillPercent = Clamp01((_displayValue - Minimum) / range);
 
             var padding = BrickPadding;
             var innerX = bounds.X + padding;
@@ -423,11 +428,14 @@ namespace Spectrum
             }
 
             var innerH = Math.Max(1, bottomInner - topInner);
+
+            float range = Math.Max(1, Maximum - Minimum);
+            var fillPercent = Clamp01((_displayValue - Minimum) / range);
+
             var filledH = (int)Math.Round(innerH * fillPercent);
             var topLimit = bottomInner - filledH;
 
-            // Mode drawing
-            var mode = GetVisualizationMode();
+            var mode = GetVisualizationModeCached();
 
             switch (mode)
             {
@@ -448,15 +456,13 @@ namespace Spectrum
                     break;
             }
 
-            // Peak marker rules:
-            // - Center/Mirror: NO peak marker
-            // - Dots: peak marker is a DOT sized like dots
-            // - Bricks: keep original line marker
             if (PeakHoldEnabled && ModeHasPeakMarker(mode))
             {
+                EnsurePeakBrushUpToDate();
+
                 if (mode == VisualizationMode.Dots)
                 {
-                    DrawPeakMarker_Dot(e.Graphics, bounds, topInner, bottomInner, innerX, innerW, innerH, range);
+                    DrawPeakMarker_Dot(e.Graphics, bounds, innerX, innerW, topInner, bottomInner, innerH, range);
                 }
                 else
                 {
@@ -465,7 +471,25 @@ namespace Spectrum
             }
         }
 
-        // ========================= Mode Draw: Bricks (KEPT as original) =========================
+        private void ConfigureGraphicsQuality(Graphics g)
+        {
+            if (HighQualityRendering)
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.CompositingQuality = CompositingQuality.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            }
+            else
+            {
+                g.SmoothingMode = SmoothingMode.None;
+                g.PixelOffsetMode = PixelOffsetMode.None;
+                g.CompositingQuality = CompositingQuality.HighSpeed;
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            }
+        }
+
+        // ========================= Mode Draw: Bricks =========================
         private void DrawMode_Bricks(Graphics g, Rectangle bounds, int topLimit)
         {
             EnsureBrickGeometry(bounds);
@@ -487,14 +511,12 @@ namespace Spectrum
 
                     g.FillRectangle(_workBrush, brickRect);
 
-                    // shade line near top of brick
                     if (brickRect.Height >= 3)
                     {
                         var shadeRect = new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2);
                         g.FillRectangle(_brickShadeBrush, shadeRect);
                     }
 
-                    // highlight line
                     if (BrickHighlight && _brickHighlightBrush != null && brickRect.Height >= 5)
                     {
                         g.FillRectangle(_brickHighlightBrush,
@@ -512,7 +534,7 @@ namespace Spectrum
             }
         }
 
-        // ========================= Mode Draw: Dots (falling kept) =========================
+        // ========================= Mode Draw: Dots =========================
         private void DrawMode_Dots(Graphics g, Rectangle bounds, int topLimit)
         {
             EnsureBrickGeometry(bounds);
@@ -530,21 +552,13 @@ namespace Spectrum
                     continue;
                 }
 
-                var color = HeatmapEnabled
+                _workBrush.Color = HeatmapEnabled
                     ? _brickHeatColors[i]
                     : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
 
-                _workBrush.Color = color;
-
-                var dotSize = Math.Min(rect.Width, rect.Height) - 1;
-                if (dotSize < 1)
-                {
-                    dotSize = 1;
-                }
-
+                var dotSize = GetDotSizeFromBrick(rect);
                 var x = rect.X + ((rect.Width - dotSize) / 2);
                 var y = rect.Y + ((rect.Height - dotSize) / 2);
-
                 g.FillEllipse(_workBrush, x, y, dotSize, dotSize);
             }
 
@@ -558,78 +572,80 @@ namespace Spectrum
                     continue;
                 }
 
-                var dotSize = Math.Min(rect.Width, rect.Height) - 1;
-                if (dotSize < 1)
-                {
-                    dotSize = 1;
-                }
-
+                var dotSize = GetDotSizeFromBrick(rect);
                 var x = rect.X + ((rect.Width - dotSize) / 2);
                 var y = rect.Y + ((rect.Height - dotSize) / 2);
-
                 g.FillEllipse(_workBrush, x, y, dotSize, dotSize);
             }
         }
 
-        // ========================= Mode Draw: Center (no falling + no peak marker) =========================
+        private static int GetDotSizeFromBrick(Rectangle brickRect)
+        {
+            var dotSize = Math.Min(brickRect.Width, brickRect.Height) - 1;
+            return dotSize < 1 ? 1 : dotSize;
+        }
+
+        // ========================= Mode Draw: Center =========================
         private void DrawMode_Center(Graphics g, int innerX, int innerW, int topInner, int innerH, float fillPercent)
         {
             var centerY = topInner + (innerH / 2);
             var halfFill = (int)Math.Round(innerH * fillPercent / 2f);
 
-            var color = GetLevelColor(fillPercent);
-            _workBrush.Color = color;
+            _workBrush.Color = GetLevelColor(fillPercent);
 
-            // Up from center
             var upRect = new Rectangle(innerX, centerY - halfFill, innerW, halfFill);
             if (upRect.Height > 0)
             {
                 g.FillRectangle(_workBrush, upRect);
             }
 
-            // Down from center
             var downRect = new Rectangle(innerX, centerY, innerW, halfFill);
             if (downRect.Height > 0)
             {
                 g.FillRectangle(_workBrush, downRect);
             }
 
-            // faint channel overlay
             _workBrush.Color = Color.FromArgb(20, 255, 255, 255);
             g.FillRectangle(_workBrush, new Rectangle(innerX, topInner, innerW, innerH));
         }
 
-        // ========================= Mode Draw: Mirror (no falling + no peak marker) =========================
+        // ========================= Mode Draw: Mirror =========================
         private void DrawMode_Mirror(Graphics g, int innerX, int innerW, int topInner, int innerH, float fillPercent)
         {
             var halfFill = (int)Math.Round(innerH * fillPercent / 2f);
 
-            var color = GetLevelColor(fillPercent);
-            _workBrush.Color = color;
+            _workBrush.Color = GetLevelColor(fillPercent);
 
-            // Bottom fill
             var bottomRect = new Rectangle(innerX, topInner + innerH - halfFill, innerW, halfFill);
             if (bottomRect.Height > 0)
             {
                 g.FillRectangle(_workBrush, bottomRect);
             }
 
-            // Top fill
             var topRect = new Rectangle(innerX, topInner, innerW, halfFill);
             if (topRect.Height > 0)
             {
                 g.FillRectangle(_workBrush, topRect);
             }
 
-            // faint channel overlay
             _workBrush.Color = Color.FromArgb(20, 255, 255, 255);
             g.FillRectangle(_workBrush, new Rectangle(innerX, topInner, innerW, innerH));
         }
 
-        // ========================= Peak Markers =========================
+        // ========================= Peak markers =========================
+        private void EnsurePeakBrushUpToDate()
+        {
+            if (_cachedPeakColor != PeakLineColor)
+            {
+                _cachedPeakColor = PeakLineColor;
+                _peakBrush.Color = PeakLineColor;
+            }
+        }
+
         private void DrawPeakMarker_Line(Graphics g, int innerX, int innerW, int topInner, int bottomInner, int innerH, float range)
         {
-            var peakPercent = Clamp01((Clamp(_peakValue, Minimum, Maximum) - Minimum) / range);
+            var pv = Clamp(_peakValue, Minimum, Maximum);
+            var peakPercent = Clamp01((pv - Minimum) / range);
             var peakY = bottomInner - (int)Math.Round(innerH * peakPercent);
 
             var thickness = Math.Max(1, PeakLineThickness);
@@ -646,14 +662,10 @@ namespace Spectrum
                 peakRect.Y = bottomInner - thickness;
             }
 
-            using (var peakBrush = new SolidBrush(PeakLineColor))
-            {
-                g.FillRectangle(peakBrush, peakRect);
-            }
+            g.FillRectangle(_peakBrush, peakRect);
         }
 
-        // Dot peak marker MUST be same size as dots.
-        private void DrawPeakMarker_Dot(Graphics g, Rectangle bounds, int topInner, int bottomInner, int innerX, int innerW, int innerH, float range)
+        private void DrawPeakMarker_Dot(Graphics g, Rectangle bounds, int innerX, int innerW, int topInner, int bottomInner, int innerH, float range)
         {
             EnsureBrickGeometry(bounds);
             if (_brickRects.Count == 0)
@@ -661,17 +673,11 @@ namespace Spectrum
                 return;
             }
 
-            var peakPercent = Clamp01((Clamp(_peakValue, Minimum, Maximum) - Minimum) / range);
+            var pv = Clamp(_peakValue, Minimum, Maximum);
+            var peakPercent = Clamp01((pv - Minimum) / range);
             var peakY = bottomInner - (int)Math.Round(innerH * peakPercent);
 
-            // Dot size based on brick geometry (same as DrawMode_Dots)
-            var sample = _brickRects[0];
-            var dotSize = Math.Min(sample.Width, sample.Height) - 1;
-            if (dotSize < 1)
-            {
-                dotSize = 1;
-            }
-
+            var dotSize = GetDotSizeFromBrick(_brickRects[0]);
             var x = innerX + ((innerW - dotSize) / 2);
             var y = peakY - (dotSize / 2);
 
@@ -685,13 +691,10 @@ namespace Spectrum
                 y = bottomInner - dotSize;
             }
 
-            using (var peakBrush = new SolidBrush(PeakLineColor))
-            {
-                g.FillEllipse(peakBrush, x, y, dotSize, dotSize);
-            }
+            g.FillEllipse(_peakBrush, x, y, dotSize, dotSize);
         }
 
-        // ========================= Geometry + Heatmap cache =========================
+        // ========================= Geometry + heatmap cache =========================
         private void EnsureBrickGeometry(Rectangle bounds)
         {
             if (bounds.Width == _cachedWidth && bounds.Height == _cachedHeight)
@@ -717,14 +720,13 @@ namespace Spectrum
                 return;
             }
 
-            var brickH = Math.Max(1, BrickHeight);
+            var brickHeight = Math.Max(1, BrickHeight);
             var gap = Math.Max(0, BrickGap);
 
-            // bottom -> top
-            var y = bottom - brickH;
+            var y = bottom - brickHeight;
             while (y >= top)
             {
-                var rect = new Rectangle(innerX, y, innerW, brickH);
+                var rect = new Rectangle(innerX, y, innerW, brickHeight);
                 _brickRects.Add(rect);
 
                 var centerY = rect.Top + (rect.Height * 0.5f);
@@ -732,7 +734,7 @@ namespace Spectrum
                 var t = (bottom - centerY) / innerH; // 0 bottom -> 1 top
                 _brickT.Add(Clamp01(t));
 
-                y -= brickH + gap;
+                y -= brickHeight + gap;
             }
 
             for (var i = 0; i < _brickRects.Count; i++)
@@ -758,12 +760,9 @@ namespace Spectrum
             {
                 var t = _brickT[i];
 
-                // boost lows
                 t = (float)Math.Pow(t, 1.0f / curve);
-
                 var c = HeatmapColorHsv(t, HeatLowColor, HeatMidColor, HeatHighColor, HeatPeakColor);
 
-                // top emphasis
                 if (TopEmphasisEnabled && t >= TopEmphasisStart)
                 {
                     var u = (t - TopEmphasisStart) / Math.Max(0.0001f, 1f - TopEmphasisStart);
@@ -802,35 +801,34 @@ namespace Spectrum
             return c;
         }
 
-        // ========================= Animation: dt-based smoothing (with mode rules) =========================
+        // ========================= Animation =========================
         private void AnimateStep(float dtSeconds, float intervalMs)
         {
-            var mode = GetVisualizationMode();
+            var mode = GetVisualizationModeCached();
 
             var target = _targetValue;
             var current = _displayValue;
 
-            // Center/Mirror: remove falling part => snap immediately when going DOWN
+            // Center/Mirror: snap down (no falling)
             if (ModeSnapsDown(mode) && target < current)
             {
                 _displayValue = target;
             }
             else
             {
-                // snap up for fast rising spectrum
+                // snap up for transients
                 if (SnapUpThreshold > 0 && target > current && (target - current) >= SnapUpThreshold)
                 {
                     _displayValue = target;
                 }
                 else
                 {
-                    // dt-based exponential smoothing
+                    // exponential smoothing
                     var tau = Math.Max(0.01f, ResponseTimeMs / 1000f);
                     var alpha = 1f - (float)Math.Exp(-dtSeconds / tau);
 
                     _displayValue = current + ((target - current) * alpha);
 
-                    // deadband
                     if (Math.Abs(_displayValue - target) < 0.05f)
                     {
                         _displayValue = target;
@@ -838,9 +836,7 @@ namespace Spectrum
                 }
             }
 
-            // Peak rules:
-            // - Center/Mirror: no peak marker => keep peak locked to display.
-            // - Bricks/Dots: keep original peak hold/decay.
+            // Peak rules
             if (!ModeHasPeakMarker(mode))
             {
                 _peakValue = _displayValue;
@@ -879,8 +875,13 @@ namespace Spectrum
                 return;
             }
 
-            // decay per tick (original behavior)
-            _peakValue -= Math.Max(0.01f, PeakDecayPerTick);
+            // ✅ MUSICIAN-GRADE: time-based decay (smooth at any FPS) PeakDecayPerTick means "decay
+            // per 60fps tick" (keeps your existing tuning valid).
+            var decayPer60FpsTick = Math.Max(0.01f, PeakDecayPerTick);
+            var decayScale = intervalMs / (1000f / 60f);   // 1.0 at 60fps
+            var decayAmount = decayPer60FpsTick * decayScale;
+
+            _peakValue -= decayAmount;
             if (_peakValue < _displayValue)
             {
                 _peakValue = _displayValue;
@@ -982,7 +983,6 @@ namespace Spectrum
 
                     ctrl.AnimateStep(dt, intervalMs);
 
-                    // repaint only if visible change
                     if (Math.Abs(ctrl._displayValue - beforeDisplay) > 0.001f ||
                         Math.Abs(ctrl._peakValue - beforePeak) > 0.001f)
                     {
@@ -1011,7 +1011,7 @@ namespace Spectrum
             }
         }
 
-        // ========================= Color helpers (HSV gradient looks better than RGB) =========================
+        // ========================= Color helpers (HSV) =========================
         private static Color HeatmapColorHsv(float t, Color low, Color mid, Color high, Color peak)
         {
             t = Clamp01(t);
@@ -1026,11 +1026,9 @@ namespace Spectrum
                 var u = (t - 0.55f) / (0.82f - 0.55f);
                 return LerpHsv(mid, high, u);
             }
-            else
-            {
-                var u = (t - 0.82f) / (1f - 0.82f);
-                return LerpHsv(high, peak, u);
-            }
+
+            var u2 = (t - 0.82f) / (1f - 0.82f);
+            return LerpHsv(high, peak, u2);
         }
 
         private static Color LerpRgb(Color a, Color b, float t)
@@ -1050,7 +1048,6 @@ namespace Spectrum
             RgbToHsv(a, out var ah, out var asat, out var av);
             RgbToHsv(b, out var bh, out var bsat, out var bv);
 
-            // shortest hue path
             var dh = bh - ah;
             if (dh > 180f)
             {
@@ -1091,9 +1088,14 @@ namespace Spectrum
             var min = Math.Min(r, Math.Min(g, b));
             var delta = max - min;
 
-            h = delta < 0.00001f
-                ? 0f
-                : max == r ? 60f * ((g - b) / delta % 6f) : max == g ? 60f * (((b - r) / delta) + 2f) : 60f * (((r - g) / delta) + 4f);
+            if (delta < 0.00001f)
+            {
+                h = 0f;
+            }
+            else
+            {
+                h = max == r ? 60f * ((g - b) / delta % 6f) : max == g ? 60f * (((b - r) / delta) + 2f) : 60f * (((r - g) / delta) + 4f);
+            }
 
             if (h < 0)
             {
@@ -1131,8 +1133,10 @@ namespace Spectrum
             return Color.FromArgb(Clamp(rr, 0, 255), Clamp(gg, 0, 255), Clamp(bb, 0, 255));
         }
 
+        // ========================= Helpers =========================
         private static float Clamp01(float v) => v < 0 ? 0 : (v > 1 ? 1 : v);
         private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+        private static int Clamp(int v, float lo, float hi) => Clamp(v, (int)lo, (int)hi); // safety
         private static float Clamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
     }
 }
