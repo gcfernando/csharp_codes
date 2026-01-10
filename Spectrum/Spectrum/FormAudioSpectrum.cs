@@ -86,7 +86,7 @@ namespace Spectrum
 
             for (var i = 1; i <= barCount; i++)
             {
-                var mode = "Pulse"; // Bricks, Dots, Center, Mirror, Line, Wave, Gradient, Pulse, Spectrum
+                var mode = "Line"; // Bricks, Dots, Center, Mirror, Line, Wave, Gradient, Pulse, Spectrum
 
                 var progress = new VerticalProgressBar
                 {
@@ -134,24 +134,6 @@ namespace Spectrum
                     progress.SnapUpThreshold = 5;
                     progress.PeakHoldMilliseconds = 0; // ignored
                     progress.PeakDecayPerTick = 1.0f;  // ignored
-                    progress.PeakLineThickness = 2;
-                }
-                else if (mode == "Line")
-                {
-                    // super readable, "meter" feel
-                    progress.ResponseTimeMs = 22;
-                    progress.SnapUpThreshold = 2;
-                    progress.PeakHoldMilliseconds = 220;
-                    progress.PeakDecayPerTick = 1.20f;
-                    progress.PeakLineThickness = 2;
-                }
-                else if (mode == "Gradient")
-                {
-                    // smooth but still quick; gradients look best without micro jitter
-                    progress.ResponseTimeMs = 30;
-                    progress.SnapUpThreshold = 2;
-                    progress.PeakHoldMilliseconds = 240;
-                    progress.PeakDecayPerTick = 1.15f;
                     progress.PeakLineThickness = 2;
                 }
                 else if (mode == "Wave")
