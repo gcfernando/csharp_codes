@@ -8,7 +8,9 @@ using System.Windows.Forms;
 
 namespace Spectrum
 {
-    // Developer : Gehan Fernando
+    // Developer : Gehan Fernando Center + Mirror now render as BRICKS (LED segments) while keeping
+    // original logic. Performance-safe: cached geometry/colors, no per-frame allocations, no
+    // switch/break logic.
 
     [Description("Vertical spectrum-style progress bar optimized for real-time updates")]
     [Category("VerticalProgressBar")]
@@ -483,11 +485,11 @@ namespace Spectrum
             }
             else if (mode == VisualizationMode.Center)
             {
-                DrawMode_Center(e.Graphics, innerX, innerW, topInner, innerH, fillPercent);
+                DrawMode_CenterBricks(e.Graphics, bounds, topInner, bottomInner, innerH, fillPercent);
             }
             else if (mode == VisualizationMode.Mirror)
             {
-                DrawMode_Mirror(e.Graphics, innerX, innerW, topInner, innerH, fillPercent);
+                DrawMode_MirrorBricks(e.Graphics, bounds, topInner, bottomInner, innerH, fillPercent);
             }
             else if (mode == VisualizationMode.Wave)
             {
@@ -632,51 +634,115 @@ namespace Spectrum
             return dotSize < 1 ? 1 : dotSize;
         }
 
-        // ========================= Mode Draw: Center =========================
-        private void DrawMode_Center(Graphics g, int innerX, int innerW, int topInner, int innerH, float fillPercent)
+        // ========================= Mode Draw: Center (BRICKS) ========================= Original
+        // Center logic: fill expands from center up/down equally.
+        // Visual: bricks, not solid bar.
+        private void DrawMode_CenterBricks(Graphics g, Rectangle bounds, int topInner, int bottomInner, int innerH, float fillPercent)
         {
+            EnsureBrickGeometry(bounds);
+            if (_colorsDirty)
+            {
+                RebuildBrickHeatColors();
+            }
+
             var centerY = topInner + (innerH / 2);
-            var halfFill = (int)Math.Round(innerH * fillPercent / 2f);
+            var halfFillH = (int)Math.Round(innerH * fillPercent / 2f);
 
-            _workBrush.Color = GetLevelColor(fillPercent);
+            // Active region is [center-halfFillH, center+halfFillH]
+            var activeTop = centerY - halfFillH;
+            var activeBottom = centerY + halfFillH;
 
-            var upRect = new Rectangle(innerX, centerY - halfFill, innerW, halfFill);
-            if (upRect.Height > 0)
+            for (var i = 0; i < _brickRects.Count; i++)
             {
-                g.FillRectangle(_workBrush, upRect);
-            }
+                var brickRect = _brickRects[i];
 
-            var downRect = new Rectangle(innerX, centerY, innerW, halfFill);
-            if (downRect.Height > 0)
-            {
-                g.FillRectangle(_workBrush, downRect);
-            }
+                // brick "center" for stable activation
+                var cy = brickRect.Top + (brickRect.Height / 2);
+                var isActive = cy >= activeTop && cy <= activeBottom;
 
-            _workBrush.Color = Color.FromArgb(20, 255, 255, 255);
-            g.FillRectangle(_workBrush, new Rectangle(innerX, topInner, innerW, innerH));
+                if (isActive)
+                {
+                    _workBrush.Color = HeatmapEnabled
+                        ? _brickHeatColors[i]
+                        : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
+
+                    g.FillRectangle(_workBrush, brickRect);
+
+                    if (brickRect.Height >= 3)
+                    {
+                        g.FillRectangle(_brickShadeBrush, new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2));
+                    }
+
+                    if (BrickHighlight && _brickHighlightBrush != null && brickRect.Height >= 5)
+                    {
+                        g.FillRectangle(_brickHighlightBrush,
+                            brickRect.X + 1,
+                            brickRect.Y + 3,
+                            Math.Max(1, brickRect.Width - 2),
+                            1);
+                    }
+                }
+                else
+                {
+                    _workBrush.Color = Color.FromArgb(30, 255, 255, 255);
+                    g.FillRectangle(_workBrush, brickRect);
+                }
+            }
         }
 
-        // ========================= Mode Draw: Mirror =========================
-        private void DrawMode_Mirror(Graphics g, int innerX, int innerW, int topInner, int innerH, float fillPercent)
+        // ========================= Mode Draw: Mirror (BRICKS) ========================= Original
+        // Mirror logic: fill from top AND bottom, symmetric (each half uses fill/2).
+        // Visual: bricks, not solid bar.
+        private void DrawMode_MirrorBricks(Graphics g, Rectangle bounds, int topInner, int bottomInner, int innerH, float fillPercent)
         {
-            var halfFill = (int)Math.Round(innerH * fillPercent / 2f);
-
-            _workBrush.Color = GetLevelColor(fillPercent);
-
-            var bottomRect = new Rectangle(innerX, topInner + innerH - halfFill, innerW, halfFill);
-            if (bottomRect.Height > 0)
+            EnsureBrickGeometry(bounds);
+            if (_colorsDirty)
             {
-                g.FillRectangle(_workBrush, bottomRect);
+                RebuildBrickHeatColors();
             }
 
-            var topRect = new Rectangle(innerX, topInner, innerW, halfFill);
-            if (topRect.Height > 0)
-            {
-                g.FillRectangle(_workBrush, topRect);
-            }
+            var halfFillH = (int)Math.Round(innerH * fillPercent / 2f);
 
-            _workBrush.Color = Color.FromArgb(20, 255, 255, 255);
-            g.FillRectangle(_workBrush, new Rectangle(innerX, topInner, innerW, innerH));
+            // Active zones: Top zone: [topInner, topInner+halfFillH] Bottom zone:
+            // [bottomInner-halfFillH, bottomInner]
+            var topZoneBottom = topInner + halfFillH;
+            var bottomZoneTop = bottomInner - halfFillH;
+
+            for (var i = 0; i < _brickRects.Count; i++)
+            {
+                var brickRect = _brickRects[i];
+                var cy = brickRect.Top + (brickRect.Height / 2);
+
+                var isActive = (halfFillH > 0) && (cy <= topZoneBottom || cy >= bottomZoneTop);
+
+                if (isActive)
+                {
+                    _workBrush.Color = HeatmapEnabled
+                        ? _brickHeatColors[i]
+                        : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
+
+                    g.FillRectangle(_workBrush, brickRect);
+
+                    if (brickRect.Height >= 3)
+                    {
+                        g.FillRectangle(_brickShadeBrush, new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2));
+                    }
+
+                    if (BrickHighlight && _brickHighlightBrush != null && brickRect.Height >= 5)
+                    {
+                        g.FillRectangle(_brickHighlightBrush,
+                            brickRect.X + 1,
+                            brickRect.Y + 3,
+                            Math.Max(1, brickRect.Width - 2),
+                            1);
+                    }
+                }
+                else
+                {
+                    _workBrush.Color = Color.FromArgb(30, 255, 255, 255);
+                    g.FillRectangle(_workBrush, brickRect);
+                }
+            }
         }
 
         // ========================= Mode Draw: Wave =========================
@@ -860,7 +926,8 @@ namespace Spectrum
                     if (tt > 0.72f && brickRect.Height >= 4)
                     {
                         _workBrush.Color = Color.FromArgb(60, 255, 255, 255);
-                        g.FillRectangle(_workBrush, new Rectangle(brickRect.X + 1, brickRect.Y + 1, Math.Max(1, brickRect.Width - 2), 1));
+                        g.FillRectangle(_workBrush,
+                            new Rectangle(brickRect.X + 1, brickRect.Y + 1, Math.Max(1, brickRect.Width - 2), 1));
                     }
 
                     if (BrickHighlight && _brickHighlightBrush != null && brickRect.Height >= 5)
@@ -1139,7 +1206,6 @@ namespace Spectrum
                 {
                     _peakHoldLeftMs = 0;
                 }
-
                 return;
             }
 

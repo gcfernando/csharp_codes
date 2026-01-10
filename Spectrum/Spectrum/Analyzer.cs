@@ -25,7 +25,7 @@ namespace Spectrum
         public static event OnChangeHandler OnChange;
 
         private const int _size = 8192;
-        private const int _lines = 82;
+        private const int _lines = 83;
         private const int _timerIntervalMs = 25;
         private const int _hangThreshold = 3;
         private const double _rmsMultiplier = 3.0 * 255.0;
