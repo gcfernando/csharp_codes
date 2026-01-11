@@ -160,20 +160,17 @@
   <ItemGroup>
     <Content Include="Ref_Files\bass.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Ref_Files\basswasapi.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>bass.dll</Link>
     </Content>
 
-    <Content Include="Ref_Files\Bass.Net.dll">
+    <Content Include="Ref_Files\basswasapi.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>basswasapi.dll</Link>
     </Content>
-    <Content Include="Ref_Files\NAudio.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Ref_Files\NAudio.WindowsMediaFormat.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+
+    <Content Include="Ref_Files\Bass.Net.dll" />
+    <Content Include="Ref_Files\NAudio.dll" />
+    <Content Include="Ref_Files\NAudio.WindowsMediaFormat.dll" />
 
     <Content Include="Ref_Files\Speaker.png" />
     <Content Include="Ref_Files\Spectrum.ico" />
