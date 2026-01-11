@@ -8,23 +8,22 @@ using System.Windows.Forms;
 
 namespace Spectrum
 {
-    // Developer : Gehan Fernando Center + Mirror now render as BRICKS (LED segments) while keeping
-    // original logic. Performance-safe: cached geometry/colors, no per-frame allocations, no
-    // switch/break logic.
-
-    [Description("Vertical spectrum-style progress bar optimized for real-time updates")]
+    // Developed by Gehan Fernando
+    [Description("Vertical spectrum-style progress bar")]
     [Category("VerticalProgressBar")]
     [RefreshProperties(RefreshProperties.All)]
-    public class VerticalProgressBar : ProgressBar
+    public sealed class VerticalProgressBar : ProgressBar
     {
         // ========================= Shared timer for all instances (low overhead) =========================
-        private static readonly object _lock = new object();
-        private static Timer _timer;
-        private static readonly List<WeakReference<VerticalProgressBar>> _instances =
+        private static readonly object s_lock = new object();
+        private static System.Windows.Forms.Timer s_timer;
+        private static readonly List<WeakReference<VerticalProgressBar>> s_instances =
             new List<WeakReference<VerticalProgressBar>>(128);
 
-        private static readonly Stopwatch _stopwatch = Stopwatch.StartNew();
-        private static long _lastTicks;
+        private static readonly Stopwatch s_stopwatch = Stopwatch.StartNew();
+        private static long s_lastTicks;
+        private static int s_idleTicks; // consecutive ticks with no visual change
+        private const int SleepAfterIdleTicks = 12; // ~200ms at 60fps
 
         // ========================= Internal state =========================
         private volatile int _targetValue;
@@ -33,6 +32,12 @@ namespace Spectrum
         // Peak hold
         private float _peakValue;
         private float _peakHoldLeftMs;
+
+        // Quantized render state (prevents micro invalidation jitter -> flicker at silence)
+        private int _lastDisplayQ = int.MinValue;
+        private int _lastPeakQ = int.MinValue;
+        private int _lastAnimQ = int.MinValue; // for wave/pulse time animation
+        private VisualizationMode _lastModeQ = (VisualizationMode)(-1);
 
         // ========================= Cached geometry + colors =========================
         private readonly List<Rectangle> _brickRects = new List<Rectangle>(256);
@@ -60,7 +65,7 @@ namespace Spectrum
         private float _cachedWaveWidth = -1f;
 
         // Wave points cache (avoid per-frame alloc)
-        private readonly Point[] _wavePoints = new Point[96]; // fixed capacity; we use only part
+        private readonly System.Drawing.Point[] _wavePoints = new System.Drawing.Point[96];
 
         // ========================= Visualization (NO new public properties) =========================
         private enum VisualizationMode
@@ -143,7 +148,6 @@ namespace Spectrum
                 return VisualizationMode.Spectrum;
             }
 
-            // fallback
             tagText = tagText.ToLowerInvariant();
             switch (tagText)
             {
@@ -170,9 +174,11 @@ namespace Spectrum
         private static bool ModeSnapsDown(VisualizationMode mode)
             => mode == VisualizationMode.Center || mode == VisualizationMode.Mirror;
 
-        // Peak marker makes sense for typical level displays; keep it for all except Center/Mirror.
         private static bool ModeHasPeakMarker(VisualizationMode mode)
             => mode != VisualizationMode.Center && mode != VisualizationMode.Mirror;
+
+        private static bool ModeHasTimeAnimation(VisualizationMode mode)
+            => mode == VisualizationMode.Wave || mode == VisualizationMode.Pulse;
 
         // ========================= Appearance - bricks =========================
         [Category("Appearance")]
@@ -334,6 +340,9 @@ namespace Spectrum
         [Description("If target jumps up more than this many units, snap immediately. 0 disables.")]
         public int SnapUpThreshold { get; set; } = 6;
 
+        // Snap-to-min guard to stop “silent flicker” due to tiny float decay + invalidations
+        private const float SilentSnapEpsilon = 0.06f;
+
         // ========================= ctor / dispose =========================
         public VerticalProgressBar()
         {
@@ -398,6 +407,13 @@ namespace Spectrum
             _cachedWidth = -1;
             _cachedHeight = -1;
             _colorsDirty = true;
+
+            // geometry changes affect “render quantization”, reset so next frame repaints once
+            _lastDisplayQ = int.MinValue;
+            _lastPeakQ = int.MinValue;
+            _lastAnimQ = int.MinValue;
+            _lastModeQ = (VisualizationMode)(-1);
+
             Invalidate();
         }
 
@@ -410,6 +426,9 @@ namespace Spectrum
                 var v = Clamp(value, Minimum, Maximum);
                 base.Value = v;
                 _targetValue = v;
+
+                // wake shared timer if it slept
+                EnsureTimerConfigured();
             }
         }
 
@@ -422,10 +441,22 @@ namespace Spectrum
             }
 
             var v = Clamp(value, Minimum, Maximum);
+
+            // IMPORTANT: wake timer on target update (fixes “sleep” edge cases)
+            EnsureTimerConfigured();
+
             if (InvokeRequired)
             {
                 try
-                { _ = BeginInvoke((Action)(() => _targetValue = v)); }
+                {
+                    _ = BeginInvoke((Action)(() =>
+                    {
+                        if (!IsDisposed)
+                        {
+                            _targetValue = v;
+                        }
+                    }));
+                }
                 catch { }
             }
             else
@@ -499,7 +530,7 @@ namespace Spectrum
             {
                 DrawMode_Pulse(e.Graphics, bounds, topLimit, fillPercent);
             }
-            else // Spectrum
+            else
             {
                 DrawMode_Spectrum(e.Graphics, bounds, topLimit, fillPercent);
             }
@@ -508,7 +539,6 @@ namespace Spectrum
             {
                 EnsurePeakBrushUpToDate();
 
-                // Dots mode uses dot marker; everything else uses line marker
                 if (mode == VisualizationMode.Dots)
                 {
                     DrawPeakMarker_Dot(e.Graphics, bounds, innerX, innerW, topInner, bottomInner, innerH, range);
@@ -562,8 +592,7 @@ namespace Spectrum
 
                     if (brickRect.Height >= 3)
                     {
-                        var shadeRect = new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2);
-                        g.FillRectangle(_brickShadeBrush, shadeRect);
+                        g.FillRectangle(_brickShadeBrush, new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2));
                     }
 
                     if (BrickHighlight && _brickHighlightBrush != null && brickRect.Height >= 5)
@@ -634,9 +663,7 @@ namespace Spectrum
             return dotSize < 1 ? 1 : dotSize;
         }
 
-        // ========================= Mode Draw: Center (BRICKS) ========================= Original
-        // Center logic: fill expands from center up/down equally.
-        // Visual: bricks, not solid bar.
+        // ========================= Mode Draw: Center (BRICKS) =========================
         private void DrawMode_CenterBricks(Graphics g, Rectangle bounds, int topInner, int bottomInner, int innerH, float fillPercent)
         {
             EnsureBrickGeometry(bounds);
@@ -648,15 +675,12 @@ namespace Spectrum
             var centerY = topInner + (innerH / 2);
             var halfFillH = (int)Math.Round(innerH * fillPercent / 2f);
 
-            // Active region is [center-halfFillH, center+halfFillH]
             var activeTop = centerY - halfFillH;
             var activeBottom = centerY + halfFillH;
 
             for (var i = 0; i < _brickRects.Count; i++)
             {
                 var brickRect = _brickRects[i];
-
-                // brick "center" for stable activation
                 var cy = brickRect.Top + (brickRect.Height / 2);
                 var isActive = cy >= activeTop && cy <= activeBottom;
 
@@ -690,9 +714,7 @@ namespace Spectrum
             }
         }
 
-        // ========================= Mode Draw: Mirror (BRICKS) ========================= Original
-        // Mirror logic: fill from top AND bottom, symmetric (each half uses fill/2).
-        // Visual: bricks, not solid bar.
+        // ========================= Mode Draw: Mirror (BRICKS) =========================
         private void DrawMode_MirrorBricks(Graphics g, Rectangle bounds, int topInner, int bottomInner, int innerH, float fillPercent)
         {
             EnsureBrickGeometry(bounds);
@@ -703,8 +725,6 @@ namespace Spectrum
 
             var halfFillH = (int)Math.Round(innerH * fillPercent / 2f);
 
-            // Active zones: Top zone: [topInner, topInner+halfFillH] Bottom zone:
-            // [bottomInner-halfFillH, bottomInner]
             var topZoneBottom = topInner + halfFillH;
             var bottomZoneTop = bottomInner - halfFillH;
 
@@ -766,25 +786,21 @@ namespace Spectrum
             g.FillRectangle(_workBrush, fillRect);
 
             // waveform line
-            var t = (float)_stopwatch.Elapsed.TotalSeconds;
+            var t = (float)s_stopwatch.Elapsed.TotalSeconds;
 
-            // amplitude scales with width and level
             var amp = Math.Max(1f, innerW * 0.22f * (0.25f + (0.75f * fillPercent)));
-            var freq = 2.2f; // cycles per second
+            var freq = 2.2f;
             var phase = t * (float)(Math.PI * 2) * freq;
 
-            // number of points (cap by fixed array length)
             var points = Math.Min(_wavePoints.Length, Math.Max(12, fillRect.Height / 4));
             var midX = innerX + (innerW / 2);
 
-            // step along Y (top->bottom)
             var stepY = points <= 1 ? 1 : (float)fillRect.Height / (points - 1);
             for (var i = 0; i < points; i++)
             {
                 var y = fillRect.Y + (int)Math.Round(i * stepY);
-                var yy01 = fillRect.Height <= 1 ? 0f : (float)i / (points - 1); // 0 top..1 bottom
+                var yy01 = fillRect.Height <= 1 ? 0f : (float)i / (points - 1);
 
-                // stronger wiggle near the top
                 var localAmp = amp * (0.35f + (0.65f * (1f - yy01)));
 
                 var x = midX + (int)Math.Round(((float)Math.Sin(phase + (yy01 * 6.0f))) * localAmp);
@@ -798,12 +814,11 @@ namespace Spectrum
                     x = innerX + innerW - 1;
                 }
 
-                _wavePoints[i] = new Point(x, y);
+                _wavePoints[i] = new System.Drawing.Point(x, y);
             }
 
             EnsureWavePenUpToDate(fillPercent, 2.2f);
 
-            // draw waveform
             if (points >= 2)
             {
                 for (var i = 1; i < points; i++)
@@ -839,9 +854,8 @@ namespace Spectrum
                 RebuildBrickHeatColors();
             }
 
-            var t = (float)_stopwatch.Elapsed.TotalSeconds;
+            var t = (float)s_stopwatch.Elapsed.TotalSeconds;
 
-            // pulse rate increases slightly with level
             var rate = 1.2f + (2.2f * fillPercent);
             var pulse = 0.55f + (0.45f * (float)Math.Sin(t * (float)(Math.PI * 2.0) * rate));
             pulse = Clamp01(pulse);
@@ -855,7 +869,6 @@ namespace Spectrum
                 {
                     var c = HeatmapEnabled ? _brickHeatColors[i] : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
 
-                    // pulse as brightness via alpha mix toward white
                     var strength = 0.10f + (0.35f * pulse);
                     var cp = LerpRgb(c, Color.White, strength);
 
@@ -864,8 +877,7 @@ namespace Spectrum
 
                     if (brickRect.Height >= 3)
                     {
-                        var shadeRect = new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2);
-                        g.FillRectangle(_brickShadeBrush, shadeRect);
+                        g.FillRectangle(_brickShadeBrush, new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2));
                     }
 
                     if (BrickHighlight && _brickHighlightBrush != null && brickRect.Height >= 5)
@@ -903,8 +915,7 @@ namespace Spectrum
                 {
                     var c = HeatmapEnabled ? _brickHeatColors[i] : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
 
-                    // Extra "spectrum" pop in the top band
-                    var tt = _brickT[i]; // 0 bottom -> 1 top
+                    var tt = _brickT[i];
                     if (TopEmphasisEnabled && tt >= TopEmphasisStart)
                     {
                         var u = (tt - TopEmphasisStart) / Math.Max(0.0001f, 1f - TopEmphasisStart);
@@ -915,14 +926,11 @@ namespace Spectrum
                     _workBrush.Color = c;
                     g.FillRectangle(_workBrush, brickRect);
 
-                    // inner shade
                     if (brickRect.Height >= 3)
                     {
-                        var shadeRect = new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2);
-                        g.FillRectangle(_brickShadeBrush, shadeRect);
+                        g.FillRectangle(_brickShadeBrush, new Rectangle(brickRect.X, brickRect.Y, brickRect.Width, 2));
                     }
 
-                    // glow line for top-ish bricks
                     if (tt > 0.72f && brickRect.Height >= 4)
                     {
                         _workBrush.Color = Color.FromArgb(60, 255, 255, 255);
@@ -941,13 +949,11 @@ namespace Spectrum
                 }
                 else
                 {
-                    // spectrum-style "grid" background
                     _workBrush.Color = Color.FromArgb(16, 255, 255, 255);
                     g.FillRectangle(_workBrush, brickRect);
                 }
             }
 
-            // subtle overall gloss proportional to level
             if (fillPercent > 0.01f)
             {
                 var pad = BrickPadding;
@@ -1040,6 +1046,7 @@ namespace Spectrum
             _cachedWidth = bounds.Width;
             _cachedHeight = bounds.Height;
 
+            // keep capacity, just clear (no new allocations)
             _brickRects.Clear();
             _brickT.Clear();
             _brickHeatColors.Clear();
@@ -1059,19 +1066,21 @@ namespace Spectrum
             var gap = Math.Max(0, BrickGap);
 
             var y = bottom - brickHeight;
+            var innerH = Math.Max(1f, bottom - top);
+
             while (y >= top)
             {
                 var rect = new Rectangle(innerX, y, innerW, brickHeight);
                 _brickRects.Add(rect);
 
                 var centerY = rect.Top + (rect.Height * 0.5f);
-                var innerH = Math.Max(1f, bottom - top);
                 var t = (bottom - centerY) / innerH; // 0 bottom -> 1 top
                 _brickT.Add(Clamp01(t));
 
                 y -= brickHeight + gap;
             }
 
+            // mirror list length without allocating per element later
             for (var i = 0; i < _brickRects.Count; i++)
             {
                 _brickHeatColors.Add(Color.Empty);
@@ -1164,11 +1173,18 @@ namespace Spectrum
 
                     _displayValue = current + ((target - current) * alpha);
 
+                    // hard snap when close enough
                     if (Math.Abs(_displayValue - target) < 0.05f)
                     {
                         _displayValue = target;
                     }
                 }
+            }
+
+            // Fix silent flicker: when target is Minimum and we're near it, snap fully to Minimum
+            if (target <= Minimum && _displayValue <= (Minimum + SilentSnapEpsilon))
+            {
+                _displayValue = Minimum;
             }
 
             // Peak rules
@@ -1180,6 +1196,13 @@ namespace Spectrum
             else
             {
                 UpdatePeakHold(intervalMs);
+
+                // also snap peak to min at silence (prevents a “1px” wandering line)
+                if (_targetValue <= Minimum && _displayValue <= Minimum + SilentSnapEpsilon && _peakValue <= Minimum + 0.25f)
+                {
+                    _peakValue = Minimum;
+                    _peakHoldLeftMs = 0;
+                }
             }
         }
 
@@ -1206,12 +1229,12 @@ namespace Spectrum
                 {
                     _peakHoldLeftMs = 0;
                 }
+
                 return;
             }
 
-            // time-based decay (smooth at any FPS); PeakDecayPerTick tuned for 60fps
             var decayPer60FpsTick = Math.Max(0.01f, PeakDecayPerTick);
-            var decayScale = intervalMs / (1000f / 60f);   // 1.0 at 60fps
+            var decayScale = intervalMs / (1000f / 60f);
             var decayAmount = decayPer60FpsTick * decayScale;
 
             _peakValue -= decayAmount;
@@ -1219,76 +1242,129 @@ namespace Spectrum
             {
                 _peakValue = _displayValue;
             }
+
+            if (_peakValue < Minimum)
+            {
+                _peakValue = Minimum;
+            }
+        }
+
+        // Computes whether this instance needs repaint, using quantization to avoid micro-jitter invalidations.
+        private bool ComputeShouldInvalidate(VisualizationMode mode)
+        {
+            // Quantize level & peak into 0..1024 buckets (cheap & stable)
+            var min = Minimum;
+            var max = Maximum;
+            var range = Math.Max(1, max - min);
+
+            var d01 = Clamp01((_displayValue - min) / range);
+            var p01 = Clamp01((_peakValue - min) / range);
+
+            // 1024 steps = stable, but still smooth for audio bars
+            var dq = (int)((d01 * 1024f) + 0.5f);
+            var pq = (int)((p01 * 1024f) + 0.5f);
+
+            // time animation bucket only when actually visible (level > 0)
+            var aq = 0;
+            if (ModeHasTimeAnimation(mode) && dq > 0)
+            {
+                // ~30 fps animation bucket; prevents needless invalidation at 60/120fps while
+                // preserving motion
+                aq = (int)(s_stopwatch.ElapsedMilliseconds / 33L);
+            }
+
+            var changed =
+                dq != _lastDisplayQ ||
+                pq != _lastPeakQ ||
+                aq != _lastAnimQ ||
+                mode != _lastModeQ;
+
+            _lastDisplayQ = dq;
+            _lastPeakQ = pq;
+            _lastAnimQ = aq;
+            _lastModeQ = mode;
+
+            return changed;
         }
 
         // ========================= Register / Unregister + timer =========================
         private void RegisterInstance()
         {
-            lock (_lock)
+            lock (s_lock)
             {
-                _instances.Add(new WeakReference<VerticalProgressBar>(this));
-                EnsureTimerConfigured();
+                s_instances.Add(new WeakReference<VerticalProgressBar>(this));
+                EnsureTimerConfigured_NoLock();
             }
         }
 
         private void UnregisterInstance()
         {
-            lock (_lock)
+            lock (s_lock)
             {
-                for (var i = _instances.Count - 1; i >= 0; i--)
+                for (var i = s_instances.Count - 1; i >= 0; i--)
                 {
-                    if (!_instances[i].TryGetTarget(out var ctrl) || ctrl == this || ctrl.IsDisposed)
+                    if (!s_instances[i].TryGetTarget(out var ctrl) || ctrl == this || ctrl.IsDisposed)
                     {
-                        _instances.RemoveAt(i);
+                        s_instances.RemoveAt(i);
                     }
                 }
 
-                if (_instances.Count == 0 && _timer != null)
+                if (s_instances.Count == 0 && s_timer != null)
                 {
-                    _timer.Stop();
-                    _timer.Dispose();
-                    _timer = null;
-                    _lastTicks = 0;
+                    s_timer.Stop();
+                    s_timer.Dispose();
+                    s_timer = null;
+                    s_lastTicks = 0;
+                    s_idleTicks = 0;
                 }
             }
         }
 
         private void EnsureTimerConfigured()
         {
-            lock (_lock)
+            lock (s_lock)
             {
-                if (_timer == null)
-                {
-                    _timer = new Timer();
-                    _timer.Tick += (s, e) => TickAll();
-                    _lastTicks = 0;
-                }
+                EnsureTimerConfigured_NoLock();
+            }
+        }
 
-                var interval = Math.Max(4, (int)Math.Round(1000.0 / Math.Max(15, AnimationFps)));
-                if (_timer.Interval != interval)
-                {
-                    _timer.Interval = interval;
-                }
+        private void EnsureTimerConfigured_NoLock()
+        {
+            if (s_timer == null)
+            {
+                s_timer = new System.Windows.Forms.Timer();
+                s_timer.Tick += (s, e) => TickAll();
+                s_lastTicks = 0;
+                s_idleTicks = 0;
+            }
 
-                if (!_timer.Enabled)
-                {
-                    _timer.Start();
-                }
+            var fps = Math.Max(15, _animationFps);
+            var interval = Math.Max(4, (int)Math.Round(1000.0 / fps));
+
+            if (s_timer.Interval != interval)
+            {
+                s_timer.Interval = interval;
+            }
+
+            if (!s_timer.Enabled)
+            {
+                s_timer.Start();
             }
         }
 
         private static void TickAll()
         {
-            lock (_lock)
+            lock (s_lock)
             {
-                if (_instances.Count == 0)
+                if (s_instances.Count == 0)
                 {
                     return;
                 }
 
-                var now = _stopwatch.ElapsedTicks;
-                var last = _lastTicks == 0 ? now : _lastTicks;
-                _lastTicks = now;
+                // If we went idle and timer stopped, we wouldn't be here. Compute dt
+                var now = s_stopwatch.ElapsedTicks;
+                var last = s_lastTicks == 0 ? now : s_lastTicks;
+                s_lastTicks = now;
 
                 var dt = (float)((now - last) / (double)Stopwatch.Frequency);
                 if (dt <= 0)
@@ -1303,32 +1379,49 @@ namespace Spectrum
 
                 var intervalMs = dt * 1000f;
 
-                for (var i = _instances.Count - 1; i >= 0; i--)
+                var anyInvalidated = false;
+
+                for (var i = s_instances.Count - 1; i >= 0; i--)
                 {
-                    if (!_instances[i].TryGetTarget(out var ctrl) || ctrl.IsDisposed)
+                    if (!s_instances[i].TryGetTarget(out var ctrl) || ctrl.IsDisposed)
                     {
-                        _instances.RemoveAt(i);
+                        s_instances.RemoveAt(i);
                         continue;
                     }
 
-                    var beforeDisplay = ctrl._displayValue;
-                    var beforePeak = ctrl._peakValue;
-
                     ctrl.AnimateStep(dt, intervalMs);
 
-                    if (Math.Abs(ctrl._displayValue - beforeDisplay) > 0.001f ||
-                        Math.Abs(ctrl._peakValue - beforePeak) > 0.001f)
+                    var mode = ctrl.GetVisualizationModeCached();
+                    if (ctrl.ComputeShouldInvalidate(mode))
                     {
                         ctrl.Invalidate();
+                        anyInvalidated = true;
                     }
                 }
 
-                if (_instances.Count == 0 && _timer != null)
+                if (!anyInvalidated)
                 {
-                    _timer.Stop();
-                    _timer.Dispose();
-                    _timer = null;
-                    _lastTicks = 0;
+                    s_idleTicks++;
+                    if (s_idleTicks >= SleepAfterIdleTicks && s_timer != null)
+                    {
+                        // Sleep timer when absolutely stable; it will be woken by Value/SetTargetValueThreadSafe
+                        s_timer.Stop();
+                        s_idleTicks = 0;
+                        s_lastTicks = 0;
+                    }
+                }
+                else
+                {
+                    s_idleTicks = 0;
+                }
+
+                if (s_instances.Count == 0 && s_timer != null)
+                {
+                    s_timer.Stop();
+                    s_timer.Dispose();
+                    s_timer = null;
+                    s_lastTicks = 0;
+                    s_idleTicks = 0;
                 }
             }
         }
@@ -1464,7 +1557,6 @@ namespace Spectrum
         // ========================= Helpers =========================
         private static float Clamp01(float v) => v < 0 ? 0 : (v > 1 ? 1 : v);
         private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
-        private static int Clamp(int v, float lo, float hi) => Clamp(v, (int)lo, (int)hi); // safety
         private static float Clamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
     }
 }
