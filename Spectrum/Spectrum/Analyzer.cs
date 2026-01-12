@@ -1,15 +1,15 @@
-﻿using System;
-using System.Collections.Concurrent;
+﻿// =============================== Analyzer.cs ===============================
+// Developed by Gehan Fernando (optimized + hardened)
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Windows.Threading;
+using System.Windows.Forms;
 
 using Un4seen.Bass;
 using Un4seen.BassWasapi;
-
-// Developed by Gehan Fernando
 
 namespace Spectrum;
 
@@ -25,36 +25,39 @@ public sealed class Analyzer : IDisposable
 {
     public static event OnChangeHandler OnChange;
 
-    // Configuration constants
-    private const int SIZE = 8192;
+    private const int FFT_SIZE = 8192;
     private const int LINES = 83;
-    private const int TIMER_INTERVAL_MS = 25;
+
+    private const int TIMER_INTERVAL_MS = 25; // ~40fps
     private const int HANG_THRESHOLD = 3;
+    private const int SILENCE_FRAMES_REQUIRED = 4;
+
     private const double RMS_MULTIPLIER = 3.0 * 255.0;
     private const double RMS_OFFSET = 4.0;
-    private const int SILENCE_THRESHOLD = 100;
-    private const int SILENCE_FRAMES_REQUIRED = 4;
+
+    // Analyzer-side smoothing
     private const float SMOOTHING_FACTOR = 0.45f;
 
-    // Thread-safe data structures
-    private readonly DispatcherTimer _timer;
+    // Silence fade characteristics
+    private const float SILENCE_FADE_MULT = 0.80f; // per tick
+    private const float SILENCE_SNAP_TO_ZERO = 0.50f;
+
+    private readonly System.Windows.Forms.Timer _timer;
     private readonly float[] _fft;
-    private readonly WASAPIPROC _process;
     private readonly int[] _bandEdges;
-    private readonly byte[] _spectrumData;
-    private readonly byte[] _previousSpectrum;
     private readonly float[] _smoothedSpectrum;
-    private readonly ConcurrentQueue<byte[]> _dataPool;
+    private readonly byte[] _spectrumData;
+
+    private readonly WASAPIPROC _process;
     private static readonly object _sender = new();
 
-    // State tracking
     private int _lastLevel;
     private int _hangCounter;
-    private int _silenceCounter;
+    private int _consecutiveZeroLevels;
+
     private bool _initialized;
     private bool _disposed;
-    private bool _isSilent;
-    private int _consecutiveZeroLevels;
+    private bool _silenceMode;
 
     public int SelectIndex { get; set; }
 
@@ -62,24 +65,17 @@ public sealed class Analyzer : IDisposable
     {
         BassNet.Registration("buddyknox@usa.org", "2X11841782815");
 
-        // Pre-allocate all buffers
-        _fft = new float[SIZE];
+        _fft = new float[FFT_SIZE];
         _spectrumData = new byte[LINES];
-        _previousSpectrum = new byte[LINES];
         _smoothedSpectrum = new float[LINES];
-        _bandEdges = BuildBandsUpper(LINES, SIZE);
-        _dataPool = new ConcurrentQueue<byte[]>();
+        _bandEdges = BuildBandsUpper(LINES, FFT_SIZE);
+
         _process = Process;
 
-        // Pre-populate pool with reusable arrays
-        for (var i = 0; i < 4; i++)
+        _timer = new System.Windows.Forms.Timer
         {
-            _dataPool.Enqueue(new byte[LINES]);
-        }
-
-        _timer = new DispatcherTimer(DispatcherPriority.Render)
-        {
-            Interval = TimeSpan.FromMilliseconds(TIMER_INTERVAL_MS)
+            Interval = TIMER_INTERVAL_MS,
+            Enabled = false
         };
         _timer.Tick += TimerTick;
 
@@ -101,13 +97,14 @@ public sealed class Analyzer : IDisposable
             var b1 = (int)Math.Pow(2, x * multiplier);
             upper[x] = Math.Min(b1, size);
         }
+
         return upper;
     }
 
     private List<Device> DeviceList()
     {
         var count = BassWasapi.BASS_WASAPI_GetDeviceCount();
-        var devices = new List<Device>(count);
+        var devices = new List<Device>(Math.Max(0, count));
 
         for (var i = 0; i < count; i++)
         {
@@ -122,24 +119,28 @@ public sealed class Analyzer : IDisposable
             }
         }
 
-        var device = devices.FirstOrDefault(d => d.DeviceName.Contains("Headphones"))
-                  ?? devices.FirstOrDefault(d => d.DeviceName.Contains("Speakers"));
+        var device =
+            devices.FirstOrDefault(d => d.DeviceName.IndexOf("Headphones", StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? devices.FirstOrDefault(d => d.DeviceName.IndexOf("Headset", StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? devices.FirstOrDefault(d => d.DeviceName.IndexOf("Speakers", StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? devices.FirstOrDefault();
 
         if (device != null)
-        {
             SelectIndex = device.Index;
-        }
 
         return devices;
     }
 
     private void Enable(bool value)
     {
+        if (_disposed) return;
+
         if (value)
         {
             if (!_initialized)
             {
                 _ = BassWasapi.BASS_WASAPI_GetDeviceInfo(SelectIndex);
+
                 var success = BassWasapi.BASS_WASAPI_Init(
                     SelectIndex,
                     0,
@@ -162,11 +163,11 @@ public sealed class Analyzer : IDisposable
 
             _ = BassWasapi.BASS_WASAPI_Start();
             Thread.Sleep(250);
-            _timer.IsEnabled = true;
+            _timer.Enabled = true;
         }
         else
         {
-            _timer.IsEnabled = false;
+            _timer.Enabled = false;
             _ = BassWasapi.BASS_WASAPI_Stop(true);
             _initialized = false;
             Free();
@@ -178,41 +179,33 @@ public sealed class Analyzer : IDisposable
 
     public void Free()
     {
-        if (!_disposed)
-        {
-            _ = BassWasapi.BASS_WASAPI_Free();
-            _ = Bass.BASS_Free();
-        }
+        if (_disposed) return;
+
+        _ = BassWasapi.BASS_WASAPI_Free();
+        _ = Bass.BASS_Free();
     }
 
     private void TimerTick(object sender, EventArgs e)
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
-        // Clear FFT buffer efficiently
-        Array.Clear(_fft, 0, SIZE);
-
+        // No Array.Clear: BASS fills the buffer
         var ret = BassWasapi.BASS_WASAPI_GetData(_fft, (int)BASSData.BASS_DATA_FFT16384);
 
-        // Handle errors and silence detection
         if (ret < 0)
         {
-            HandleSilence();
+            FadeSilenceAndFire();
             return;
         }
 
         var level = BassWasapi.BASS_WASAPI_GetLevel();
 
-        // Detect complete silence (music stopped)
         if (level == 0)
         {
             _consecutiveZeroLevels++;
             if (_consecutiveZeroLevels >= SILENCE_FRAMES_REQUIRED)
             {
-                HandleSilence();
+                FadeSilenceAndFire();
                 HandleDeviceHang(level);
                 return;
             }
@@ -220,52 +213,59 @@ public sealed class Analyzer : IDisposable
         else
         {
             _consecutiveZeroLevels = 0;
-            _isSilent = false;
+            _silenceMode = false;
         }
 
-        ProcessFFTData();
+        ProcessFFTDataAndFire();
         HandleDeviceHang(level);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void HandleSilence()
+    private void FadeSilenceAndFire()
     {
-        if (_isSilent)
-        {
-            return;
-        }
+        _silenceMode = true;
 
-        _isSilent = true;
+        var anyNonZero = false;
 
-        // Gradually fade out to prevent flickering
         for (var i = 0; i < LINES; i++)
         {
-            _smoothedSpectrum[i] *= 0.5f;
-            _spectrumData[i] = (byte)Math.Max(0, (int)_smoothedSpectrum[i]);
+            _smoothedSpectrum[i] *= SILENCE_FADE_MULT;
+
+            if (_smoothedSpectrum[i] < SILENCE_SNAP_TO_ZERO)
+                _smoothedSpectrum[i] = 0;
+
+            var v = (byte)_smoothedSpectrum[i];
+            _spectrumData[i] = v;
+
+            if (v != 0) anyNonZero = true;
         }
 
         FireOnChange();
+
+        if (!anyNonZero)
+        {
+            _silenceMode = false;
+            _consecutiveZeroLevels = 0;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ProcessFFTData()
+    private void ProcessFFTDataAndFire()
     {
         var b0 = 0;
         const int fftOffset = 1;
+
         var hasSignal = false;
 
         for (var x = 0; x < LINES; x++)
         {
-            var b1 = Math.Min(_bandEdges[x], SIZE);
-            if (b1 <= b0)
-            {
-                b1 = b0 + 1;
-            }
+            var b1 = _bandEdges[x];
+            if (b1 > FFT_SIZE) b1 = FFT_SIZE;
+            if (b1 <= b0) b1 = b0 + 1;
 
             var sum = 0.0;
             var n = b1 - b0;
 
-            // Vectorizable loop - compiler can optimize this
             for (var i = b0; i < b1; i++)
             {
                 var v = _fft[fftOffset + i];
@@ -277,62 +277,38 @@ public sealed class Analyzer : IDisposable
             var rms = n > 0 ? Math.Sqrt(sum / n) : 0.0;
             var rawValue = (int)((Math.Sqrt(rms) * RMS_MULTIPLIER) - RMS_OFFSET);
 
-            // Clamp
-            var clampedValue = rawValue > 255 ? 255 : (rawValue < 0 ? 0 : rawValue);
+            var clamped = rawValue > 255 ? 255 : (rawValue < 0 ? 0 : rawValue);
 
-            // Apply exponential smoothing to reduce flickering
             _smoothedSpectrum[x] = (_smoothedSpectrum[x] * SMOOTHING_FACTOR) +
-                                   (clampedValue * (1.0f - SMOOTHING_FACTOR));
+                                   (clamped * (1.0f - SMOOTHING_FACTOR));
 
             var finalValue = (byte)_smoothedSpectrum[x];
             _spectrumData[x] = finalValue;
 
-            if (finalValue > 0)
-            {
-                hasSignal = true;
-            }
+            if (finalValue > 0) hasSignal = true;
         }
 
-        // Only fire event if there's actual signal
-        if (hasSignal || !_isSilent)
-        {
+        if (hasSignal || !_silenceMode)
             FireOnChange();
-        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void FireOnChange()
     {
-        // Try to reuse pooled array
-        if (!_dataPool.TryDequeue(out var data))
-        {
-            data = new byte[LINES];
-        }
-
-        // Fast block copy
+        // 83 bytes: allocation is fine and safe (no pooling risk with events)
+        var data = new byte[LINES];
         Buffer.BlockCopy(_spectrumData, 0, data, 0, LINES);
 
-        var args = new OnChangeEventArgs(data);
-        OnChange?.Invoke(_sender, args);
-
-        // Return to pool for reuse
-        if (_dataPool.Count < 8)
-        {
-            _dataPool.Enqueue(data);
-        }
+        OnChange?.Invoke(_sender, new OnChangeEventArgs(data));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void HandleDeviceHang(int level)
     {
         if (level == _lastLevel && level != 0)
-        {
             _hangCounter++;
-        }
         else
-        {
             _hangCounter = 0;
-        }
 
         _lastLevel = level;
 
@@ -340,7 +316,6 @@ public sealed class Analyzer : IDisposable
         {
             _hangCounter = 0;
             _consecutiveZeroLevels = 0;
-            _silenceCounter = 0;
 
             Free();
             _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
@@ -351,17 +326,17 @@ public sealed class Analyzer : IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
         _disposed = true;
-        _timer.IsEnabled = false;
+
+        _timer.Enabled = false;
         _timer.Tick -= TimerTick;
+        _timer.Dispose();
 
         Free();
 
+        // If you want standard event behavior, remove this line.
         OnChange = null;
     }
 }

@@ -1,4 +1,7 @@
-﻿using System;
+﻿// ============================ FormAudioSpectrum.cs ============================
+// Developed by Gehan Fernando (optimized + UI-safe)
+
+using System;
 using System.Configuration;
 using System.Drawing;
 using System.Runtime.CompilerServices;
@@ -7,16 +10,12 @@ using NAudio.CoreAudioApi;
 
 namespace Spectrum;
 
-// Developer: Gehan Fernando
 public partial class FormAudioSpectrum : Form
 {
     private const int BAR_COUNT = 83;
     private const int NOISE_GATE_THRESHOLD = 6;
 
-    // Performance: Array instead of List for direct indexing without bounds checks
     private VerticalProgressBar[] _progressBars;
-
-    // Pre-allocated buffer to avoid per-frame allocations
     private readonly byte[] _spectrumBuffer;
 
     // Coalescing mechanism to prevent BeginInvoke flooding
@@ -31,24 +30,21 @@ public partial class FormAudioSpectrum : Form
     {
         InitializeComponent();
 
-        // Pre-allocate buffer once
         _spectrumBuffer = new byte[BAR_COUNT];
 
-        // Enable double buffering for flicker-free rendering
         SetStyle(
             ControlStyles.OptimizedDoubleBuffer |
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint,
             true);
+
         UpdateStyles();
     }
 
     private void FormAudioSpectrum_KeyUp(object sender, KeyEventArgs e)
     {
         if (e.KeyCode == Keys.F12)
-        {
             TopMost = !TopMost;
-        }
     }
 
     private void FormAudioSpectrum_Load(object sender, EventArgs e)
@@ -63,56 +59,45 @@ public partial class FormAudioSpectrum : Form
 
         _device = GetDefaultAudioDevice();
 
+        // If you have this helper in your project, keep it:
         Taskbar.SetState(Handle, Taskbar.TaskbarStates.NoProgress);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private MMDevice GetDefaultAudioDevice()
+    private static MMDevice GetDefaultAudioDevice()
     {
         var enumerator = new MMDeviceEnumerator();
 
-        MMDevice device = null;
-
-        // Try Multimedia role first
+        // Try Multimedia role first, then Console, then Communications.
         try
         {
-            device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-            if (device != null)
-            {
-                return device;
-            }
+            var d = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            if (d != null) return d;
         }
-        catch { /* Continue */ }
+        catch { }
 
-        // Fallback to Console
         try
         {
-            device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console);
-            if (device != null)
-            {
-                return device;
-            }
+            var d = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console);
+            if (d != null) return d;
         }
-        catch { /* Continue */ }
+        catch { }
 
-        // Final fallback to Communications
         try
         {
-            device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Communications);
+            return enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Communications);
         }
-        catch { /* All attempts failed */ }
-
-        return device;
+        catch
+        {
+            return null;
+        }
     }
 
     private void InitializeBarsOptimized(string visualMode)
     {
-        // Array for O(1) access without List overhead
         _progressBars = new VerticalProgressBar[BAR_COUNT];
 
-        // Suspend layout updates until all controls added
         ambiance_ThemeSpectrum.SuspendLayout();
-
         try
         {
             var xPosition = 11;
@@ -143,7 +128,6 @@ public partial class FormAudioSpectrum : Form
         }
         finally
         {
-            // Resume and trigger single layout pass
             ambiance_ThemeSpectrum.ResumeLayout(true);
         }
     }
@@ -151,187 +135,128 @@ public partial class FormAudioSpectrum : Form
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Spectrum_Change(object obj, OnChangeEventArgs e)
     {
-        // Fast path: early exit checks
-        if (_isDisposed || _progressBars == null)
-        {
-            return;
-        }
+        if (_isDisposed || _progressBars == null) return;
 
         var spectrum = e.Spectrumdata;
-        if (spectrum == null || spectrum.Count == 0)
-        {
-            return;
-        }
+        if (spectrum == null || spectrum.Count == 0) return;
 
-        // CRITICAL OPTIMIZATION: Coalesce rapid updates Only one BeginInvoke queued at a time -
-        // prevents message queue flooding
         lock (_updateLock)
         {
-            if (_updatePending)
-            {
-                return;
-            }
-
+            if (_updatePending) return;
             _updatePending = true;
         }
 
-        // Copy data to local buffer immediately (thread-safe)
+        // Copy to local buffer immediately (thread-safe)
         var count = Math.Min(spectrum.Count, BAR_COUNT);
 
         for (var i = 0; i < count; i++)
         {
-            var value = spectrum[i];
-            _spectrumBuffer[i] = value < NOISE_GATE_THRESHOLD ? (byte)0 : value;
+            var v = spectrum[i];
+            _spectrumBuffer[i] = v < NOISE_GATE_THRESHOLD ? (byte)0 : v;
         }
 
-        // Clear remaining bars if spectrum has fewer values
         for (var i = count; i < BAR_COUNT; i++)
-        {
             _spectrumBuffer[i] = 0;
-        }
 
-        // Marshal to UI thread only once per update cycle
         if (InvokeRequired)
-        {
             _ = BeginInvoke(new Action(ApplySpectrumToUI));
-        }
         else
-        {
             ApplySpectrumToUI();
-        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ApplySpectrumToUI()
     {
-        // Reset pending flag
-        lock (_updateLock)
-        {
-            _updatePending = false;
-        }
+        lock (_updateLock) _updatePending = false;
 
-        // Batch update: suspend layout for all 83 bar updates
-        ambiance_ThemeSpectrum.SuspendLayout();
-
-        try
+        // No SuspendLayout here. Bars are fixed; layout work is wasted per frame.
+        for (var i = 0; i < BAR_COUNT; i++)
         {
-            // Direct array indexing - JIT eliminates bounds checks in Release mode
-            for (var i = 0; i < BAR_COUNT; i++)
-            {
-                _progressBars[i].SetTargetValueThreadSafe(_spectrumBuffer[i]);
-            }
-        }
-        finally
-        {
-            // Single layout pass for all changes
-            ambiance_ThemeSpectrum.ResumeLayout(false);
+            _progressBars[i].SetTargetValueUI(_spectrumBuffer[i]);
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void ApplyMeterPresetOptimized(VerticalProgressBar progress, string mode)
     {
-        // Global visuals (unchanged)
+        // Shared visuals (not part of standards)
         progress.AnimationFps = 60;
         progress.TopEmphasisStart = 0.88f;
         progress.TopEmphasisStrength = 0.60f;
         progress.HeatIntensityCurve = 1.85f;
         progress.PeakLineThickness = 2;
 
-        // Defaults for safety (preserve current behavior unless overridden per-mode)
-        progress.UseAsymmetricBallistics = false;
-        progress.ReleaseTimeMs = 0; // 0 => use ResponseTimeMs (symmetric)
+        // Safe defaults
         progress.SnapUpThreshold = 0;
+        progress.PeakDecayPerTick = 1.15f;
 
         mode = (mode ?? string.Empty).Trim().ToLowerInvariant();
 
         switch (mode)
         {
             case "bricks":
-                progress.UseAsymmetricBallistics = false; // VU is roughly symmetric
-                progress.ReleaseTimeMs = 0;
-                progress.ResponseTimeMs = 65;
-
-                progress.SnapUpThreshold = 0;        // VU shouldn't "teleport"
-                progress.PeakHoldMilliseconds = 0;    // VU is not a peak meter
-                progress.PeakDecayPerTick = 1.10f;   // irrelevant when hold=0; keep safe
-                break;
-
-            case "led":
-                progress.UseAsymmetricBallistics = true;
-
-                progress.ResponseTimeMs = 10;        // attack/integration
-                progress.ReleaseTimeMs = 1500;       // slow return (seconds-scale feel)
-
-                progress.SnapUpThreshold = 0;        // PPM integrates; snapping defeats the point
-                progress.PeakHoldMilliseconds = 0;    // true PPM doesn't need peak-hold (optional)
-                progress.PeakDecayPerTick = 1.05f;   // marker decay; keep modest
+                progress.UseAsymmetricBallistics = false; // symmetric behavior
+                progress.ResponseTimeMs = 65;            // τ ≈ 65 ms
+                progress.ReleaseTimeMs = 65;             // explicit (not used when asymmetric=false)
+                progress.PeakHoldMilliseconds = 0;       // VU is not a peak meter
                 break;
 
             case "dots":
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 50;        // moderately quick attack
-                progress.ReleaseTimeMs = 650;        // readable decay
-
-                progress.SnapUpThreshold = 0;
-                progress.PeakHoldMilliseconds = 120; // short hold helps dotted visuals
-                progress.PeakDecayPerTick = 1.08f;
+                progress.ResponseTimeMs = 5;            // fast integration (≈ IEC Type I)
+                progress.ReleaseTimeMs = 738;           // τ from 20 dB in 1.7 s
+                progress.PeakHoldMilliseconds = 0;      // standards do not require peak-hold
                 break;
 
-            case "wave":
-                // Aesthetic waveform: stable motion, avoid twitch
+            case "led":
+            case "ppmi i":
+            case "ppmi i b":
+            case "ppmi i a":
+            case "ppmi i bbc":
+            case "ppmii":
+            case "ppm2":
+            case "iec2":
+            case "bbc":
+            case "ebu":
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 60;
-                progress.ReleaseTimeMs = 500;
-
-                progress.SnapUpThreshold = 0;
-                progress.PeakHoldMilliseconds = 100;
-                progress.PeakDecayPerTick = 1.08f;
-                break;
-
-            case "pulse":
-                // Aesthetic breathing: slow envelope
-                progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 140;
-                progress.ReleaseTimeMs = 900;
-
-                progress.SnapUpThreshold = 0;
-                progress.PeakHoldMilliseconds = 0;
-                progress.PeakDecayPerTick = 1.00f;
+                progress.ResponseTimeMs = 10;           // integration (≈ IEC Type II)
+                progress.ReleaseTimeMs = 1013;          // τ from 24 dB in 2.8 s
+                progress.PeakHoldMilliseconds = 0;      // standards do not require peak-hold
                 break;
 
             case "center":
-                // "Energy field" centered: medium attack, medium/slow release for musical motion
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 80;
+                progress.ResponseTimeMs = 90;
                 progress.ReleaseTimeMs = 650;
-
-                progress.SnapUpThreshold = 0;
                 progress.PeakHoldMilliseconds = 0;
-                progress.PeakDecayPerTick = 1.00f;
                 break;
 
             case "mirror":
-                // Mirror motion reads best with slightly quicker attack but still smooth decay
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 70;
-                progress.ReleaseTimeMs = 600;
-
-                progress.SnapUpThreshold = 0;
+                progress.ResponseTimeMs = 80;
+                progress.ReleaseTimeMs = 650;
                 progress.PeakHoldMilliseconds = 0;
-                progress.PeakDecayPerTick = 1.00f;
+                break;
+
+            case "wave":
+                progress.UseAsymmetricBallistics = true;
+                progress.ResponseTimeMs = 60;
+                progress.ReleaseTimeMs = 500;
+                progress.PeakHoldMilliseconds = 100;
+                break;
+
+            case "pulse":
+                progress.UseAsymmetricBallistics = true;
+                progress.ResponseTimeMs = 140;
+                progress.ReleaseTimeMs = 900;
+                progress.PeakHoldMilliseconds = 0;
                 break;
 
             default:
-                // SPECTRUM ANALYZER / DAW-STYLE BARS (common practice): fairly quick attack, slower
-                // release to avoid "sparkle" / jitter.
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 20;        // fast attack for transients
-                progress.ReleaseTimeMs = 280;       // short-ish release for lively spectrum
-
-                progress.SnapUpThreshold = 0;       // smoothing already handles this
-                progress.PeakHoldMilliseconds = 250;
-                progress.PeakDecayPerTick = 1.15f;
+                progress.ResponseTimeMs = 7;
+                progress.ReleaseTimeMs = 300;
+                progress.PeakHoldMilliseconds = 300;
                 break;
         }
     }
@@ -344,14 +269,9 @@ public partial class FormAudioSpectrum : Form
 
     private void CleanupResources()
     {
-        if (_isDisposed)
-        {
-            return;
-        }
-
+        if (_isDisposed) return;
         _isDisposed = true;
 
-        // Unsubscribe from events
         if (_analyzer != null)
         {
             Analyzer.OnChange -= Spectrum_Change;
@@ -359,13 +279,8 @@ public partial class FormAudioSpectrum : Form
             _analyzer = null;
         }
 
-        // Dispose audio device
-        if (_device != null)
-        {
-            _device = null;
-        }
+        _device = null;
 
-        // Dispose all progress bars
         if (_progressBars != null)
         {
             for (var i = 0; i < _progressBars.Length; i++)
