@@ -1,12 +1,10 @@
-﻿// =============================== Analyzer.cs ===============================
-// Developed by Gehan Fernando (optimized + hardened)
+﻿// Developed by Gehan
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Windows.Forms;
 
 using Un4seen.Bass;
 using Un4seen.BassWasapi;
@@ -25,8 +23,15 @@ public sealed class Analyzer : IDisposable
 {
     public static event OnChangeHandler OnChange;
 
-    private const int FFT_SIZE = 8192;
+    // You call BASS_DATA_FFT16384 -> FFT length is 16384 (half-spectrum bins = 8192)
+    private const int FFT_LEN = 16384;
+    private const int FFT_HALF_BINS = FFT_LEN / 2; // 8192
+    private const int FFT_SIZE = FFT_HALF_BINS;    // keep your naming
     private const int LINES = 83;
+
+    // Desired display range
+    private const float MIN_HZ = 20f;
+    private const float MAX_HZ = 20000f;
 
     private const int TIMER_INTERVAL_MS = 25; // ~40fps
     private const int HANG_THRESHOLD = 3;
@@ -44,7 +49,7 @@ public sealed class Analyzer : IDisposable
 
     private readonly System.Windows.Forms.Timer _timer;
     private readonly float[] _fft;
-    private readonly int[] _bandEdges;
+    private int[] _bandEdges; // rebuilt after WASAPI init / re-init
     private readonly float[] _smoothedSpectrum;
     private readonly byte[] _spectrumData;
 
@@ -59,16 +64,20 @@ public sealed class Analyzer : IDisposable
     private bool _disposed;
     private bool _silenceMode;
 
+    private int _sampleRate = 48000; // updated from WASAPI info after init
+
     public int SelectIndex { get; set; }
 
     public Analyzer()
     {
         BassNet.Registration("buddyknox@usa.org", "2X11841782815");
 
-        _fft = new float[FFT_SIZE];
+        _fft = new float[FFT_SIZE];            // 8192 floats (half spectrum)
         _spectrumData = new byte[LINES];
         _smoothedSpectrum = new float[LINES];
-        _bandEdges = BuildBandsUpper(LINES, FFT_SIZE);
+
+        // Temporary placeholder until we know actual sample rate from WASAPI
+        _bandEdges = BuildBandsUpper_LogHz(LINES, FFT_SIZE, _sampleRate, MIN_HZ, MAX_HZ);
 
         _process = Process;
 
@@ -87,15 +96,47 @@ public sealed class Analyzer : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int[] BuildBandsUpper(int lines, int size)
+    private static int[] BuildBandsUpper_LogHz(int lines, int maxBin, int sampleRate, float minHz, float maxHz)
     {
         var upper = new int[lines];
-        var multiplier = 10.0 / (lines - 1);
+
+        // Clamp to valid spectrum (Nyquist)
+        var nyquist = sampleRate * 0.5f;
+        var lo = Math.Max(1f, minHz);
+        var hi = Math.Max(lo + 1f, Math.Min(maxHz, nyquist)); // ensure hi > lo
+
+        var logLo = Math.Log10(lo);
+        var logHi = Math.Log10(hi);
+        var denom = Math.Max(1, lines - 1);
+
+        var prev = 0;
 
         for (var x = 0; x < lines; x++)
         {
-            var b1 = (int)Math.Pow(2, x * multiplier);
-            upper[x] = Math.Min(b1, size);
+            var t = (double)x / denom;
+            var hz = Math.Pow(10.0, logLo + ((logHi - logLo) * t));
+
+            // Hz -> bin index (half spectrum bins are 0..FFT_LEN/2)
+            var bin = (int)Math.Round(hz * FFT_LEN / sampleRate);
+
+            if (bin < 1)
+            {
+                bin = 1;
+            }
+
+            if (bin > maxBin)
+            {
+                bin = maxBin;
+            }
+
+            // enforce strictly increasing edges so no empty bands
+            if (bin <= prev)
+            {
+                bin = Math.Min(prev + 1, maxBin);
+            }
+
+            upper[x] = bin;
+            prev = bin;
         }
 
         return upper;
@@ -126,14 +167,19 @@ public sealed class Analyzer : IDisposable
             ?? devices.FirstOrDefault();
 
         if (device != null)
+        {
             SelectIndex = device.Index;
+        }
 
         return devices;
     }
 
     private void Enable(bool value)
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
 
         if (value)
         {
@@ -158,6 +204,22 @@ public sealed class Analyzer : IDisposable
                     return;
                 }
 
+                // Get actual device sample-rate and rebuild band edges for 20..20k
+                try
+                {
+                    var info = BassWasapi.BASS_WASAPI_GetInfo();
+                    if (info.freq > 0)
+                    {
+                        _sampleRate = info.freq;
+                    }
+                }
+                catch
+                {
+                    _sampleRate = 48000;
+                }
+
+                _bandEdges = BuildBandsUpper_LogHz(LINES, FFT_SIZE, _sampleRate, MIN_HZ, MAX_HZ);
+
                 _initialized = true;
             }
 
@@ -179,7 +241,10 @@ public sealed class Analyzer : IDisposable
 
     public void Free()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
 
         _ = BassWasapi.BASS_WASAPI_Free();
         _ = Bass.BASS_Free();
@@ -187,7 +252,10 @@ public sealed class Analyzer : IDisposable
 
     private void TimerTick(object sender, EventArgs e)
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
 
         // No Array.Clear: BASS fills the buffer
         var ret = BassWasapi.BASS_WASAPI_GetData(_fft, (int)BASSData.BASS_DATA_FFT16384);
@@ -232,12 +300,17 @@ public sealed class Analyzer : IDisposable
             _smoothedSpectrum[i] *= SILENCE_FADE_MULT;
 
             if (_smoothedSpectrum[i] < SILENCE_SNAP_TO_ZERO)
+            {
                 _smoothedSpectrum[i] = 0;
+            }
 
             var v = (byte)_smoothedSpectrum[i];
             _spectrumData[i] = v;
 
-            if (v != 0) anyNonZero = true;
+            if (v != 0)
+            {
+                anyNonZero = true;
+            }
         }
 
         FireOnChange();
@@ -260,8 +333,15 @@ public sealed class Analyzer : IDisposable
         for (var x = 0; x < LINES; x++)
         {
             var b1 = _bandEdges[x];
-            if (b1 > FFT_SIZE) b1 = FFT_SIZE;
-            if (b1 <= b0) b1 = b0 + 1;
+            if (b1 > FFT_SIZE)
+            {
+                b1 = FFT_SIZE;
+            }
+
+            if (b1 <= b0)
+            {
+                b1 = b0 + 1;
+            }
 
             var sum = 0.0;
             var n = b1 - b0;
@@ -285,17 +365,21 @@ public sealed class Analyzer : IDisposable
             var finalValue = (byte)_smoothedSpectrum[x];
             _spectrumData[x] = finalValue;
 
-            if (finalValue > 0) hasSignal = true;
+            if (finalValue > 0)
+            {
+                hasSignal = true;
+            }
         }
 
         if (hasSignal || !_silenceMode)
+        {
             FireOnChange();
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void FireOnChange()
     {
-        // 83 bytes: allocation is fine and safe (no pooling risk with events)
         var data = new byte[LINES];
         Buffer.BlockCopy(_spectrumData, 0, data, 0, LINES);
 
@@ -306,9 +390,13 @@ public sealed class Analyzer : IDisposable
     private void HandleDeviceHang(int level)
     {
         if (level == _lastLevel && level != 0)
+        {
             _hangCounter++;
+        }
         else
+        {
             _hangCounter = 0;
+        }
 
         _lastLevel = level;
 
@@ -320,13 +408,18 @@ public sealed class Analyzer : IDisposable
             Free();
             _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
             _initialized = false;
+
+            // re-init will rebuild _bandEdges with actual device sample rate again
             Enable(true);
         }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
 
         _disposed = true;
 
@@ -336,7 +429,6 @@ public sealed class Analyzer : IDisposable
 
         Free();
 
-        // If you want standard event behavior, remove this line.
         OnChange = null;
     }
 }
