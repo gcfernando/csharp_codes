@@ -52,8 +52,6 @@ internal static class RoundRectangle
 
 public class Ambiance_ThemeContainer : ContainerControl
 {
-    #region Enums
-
     public enum MouseState
     {
         None = 0,
@@ -62,18 +60,12 @@ public class Ambiance_ThemeContainer : ContainerControl
         Block = 3
     }
 
-    #endregion Enums
-    #region Variables
-
     private Rectangle HeaderRect;
     protected MouseState State;
     private readonly int MoveHeight;
     private Point MouseP = new Point(0, 0);
     private bool Cap = false;
     private bool HasShown;
-
-    #endregion Variables
-    #region Properties
 
     public bool Sizable { get; set; } = true;
 
@@ -119,9 +111,6 @@ public class Ambiance_ThemeContainer : ContainerControl
             }
         }
     }
-
-    #endregion Properties
-    #region EventArgs
 
     protected sealed override void OnParentChanged(EventArgs e)
     {
@@ -233,13 +222,10 @@ public class Ambiance_ThemeContainer : ContainerControl
         {
             var SB = Screen.PrimaryScreen.Bounds;
             var CB = ParentForm.Bounds;
-            ParentForm.Location = new Point((SB.Width / 2) - (CB.Width / 2), (SB.Height / 2) - (CB.Width / 2));
+            ParentForm.Location = new Point((SB.Width / 2) - (CB.Width / 2), (SB.Height / 2) - (CB.Height / 2));
         }
         HasShown = true;
     }
-
-    #endregion EventArgs
-    #region Mouse & Size
 
     private void SetState(MouseState current)
     {
@@ -369,14 +355,37 @@ public class Ambiance_ThemeContainer : ContainerControl
         }
     }
 
-    #endregion Mouse & Size
+    private readonly Pen _outerBorderPen = new Pen(Color.FromArgb(30, 28, 25));
+    private readonly SolidBrush _bodyBrush = new SolidBrush(Color.FromArgb(12, 12, 12));
+    private readonly SolidBrush _separatorBrush = new SolidBrush(Color.FromArgb(82, 75, 60));
+    private readonly SolidBrush _titleBrush = new SolidBrush(Color.FromArgb(215, 210, 196));
+    private readonly Font _titleFont = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+    private readonly StringFormat _titleFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Near };
+
+    private LinearGradientBrush _headerBrush;
+    private int _headerBrushWidth;
 
     protected override void CreateHandle() => base.CreateHandle();
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _outerBorderPen.Dispose();
+            _bodyBrush.Dispose();
+            _separatorBrush.Dispose();
+            _titleBrush.Dispose();
+            _titleFont.Dispose();
+            _titleFormat.Dispose();
+            _headerBrush?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 
     public Ambiance_ThemeContainer()
     {
         SetStyle((ControlStyles)139270, true);
-        BackColor = Color.Black;// Color.FromArgb(244, 241, 243);
+        BackColor = Color.Black;
         Padding = new Padding(20, 56, 20, 16);
         DoubleBuffered = true;
         Dock = DockStyle.Fill;
@@ -388,87 +397,53 @@ public class Ambiance_ThemeContainer : ContainerControl
     {
         base.OnPaint(e);
         var G = e.Graphics;
-        //G.Clear(Color.FromArgb(69, 68, 63));
-        G.Clear(Color.OrangeRed);
+        G.Clear(BackColor);
 
-        G.DrawRectangle(new Pen(Color.FromArgb(38, 38, 38)), new Rectangle(0, 0, Width - 1, Height - 1));
-        // Use [Color.FromArgb(87, 86, 81), Color.FromArgb(60, 59, 55)] for a darker taste And
-        // replace each (60, 59, 55) with (69, 68, 63)
-        G.FillRectangle(new LinearGradientBrush(new Point(0, 0), new Point(0, 36), Color.FromArgb(87, 85, 77), Color.FromArgb(69, 68, 63)), new Rectangle(1, 1, Width - 2, 36));
-        G.FillRectangle(new LinearGradientBrush(new Point(0, 0), new Point(0, Height), Color.FromArgb(69, 68, 63), Color.FromArgb(69, 68, 63)), new Rectangle(1, 36, Width - 2, Height - 46));
-
-        G.DrawRectangle(new Pen(Color.FromArgb(38, 38, 38)), new Rectangle(9, 47, Width - 19, Height - 55));
-        G.FillRectangle(new SolidBrush(Color.FromArgb(244, 241, 243)), new Rectangle(10, 48, Width - 20, Height - 56));
-
-        if (_RoundCorners == true)
+        if (_headerBrush == null || _headerBrushWidth != Width)
         {
-            // Draw Left upper corner
-            G.FillRectangle(Brushes.Fuchsia, 0, 0, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 1, 0, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 2, 0, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 3, 0, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 0, 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 0, 2, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 0, 3, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 1, 1, 1, 1);
-
-            G.FillRectangle(Brushes.Black, 1, 3, 1, 1);
-            G.FillRectangle(Brushes.Black, 1, 2, 1, 1);
-            G.FillRectangle(Brushes.Black, 2, 1, 1, 1);
-            G.FillRectangle(Brushes.Black, 3, 1, 1, 1);
-
-            // Draw right upper corner
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, 0, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 2, 0, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 3, 0, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 4, 0, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, 2, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, 3, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 2, 1, 1, 1);
-
-            G.FillRectangle(Brushes.Black, Width - 2, 3, 1, 1);
-            G.FillRectangle(Brushes.Black, Width - 2, 2, 1, 1);
-            G.FillRectangle(Brushes.Black, Width - 3, 1, 1, 1);
-            G.FillRectangle(Brushes.Black, Width - 4, 1, 1, 1);
-
-            // Draw Left bottom corner
-            G.FillRectangle(Brushes.Fuchsia, 0, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 0, Height - 2, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 0, Height - 3, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 0, Height - 4, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 1, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 2, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 3, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 1, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, 1, Height - 2, 1, 1);
-
-            G.FillRectangle(Brushes.Black, 1, Height - 3, 1, 1);
-            G.FillRectangle(Brushes.Black, 1, Height - 4, 1, 1);
-            G.FillRectangle(Brushes.Black, 3, Height - 2, 1, 1);
-            G.FillRectangle(Brushes.Black, 2, Height - 2, 1, 1);
-
-            // Draw right bottom corner
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, Height, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 2, Height, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 3, Height, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 4, Height, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, Height - 2, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, Height - 3, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 2, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 3, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 4, Height - 1, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 1, Height - 4, 1, 1);
-            G.FillRectangle(Brushes.Fuchsia, Width - 2, Height - 2, 1, 1);
-
-            G.FillRectangle(Brushes.Black, Width - 2, Height - 3, 1, 1);
-            G.FillRectangle(Brushes.Black, Width - 2, Height - 4, 1, 1);
-            G.FillRectangle(Brushes.Black, Width - 4, Height - 2, 1, 1);
-            G.FillRectangle(Brushes.Black, Width - 3, Height - 2, 1, 1);
+            _headerBrush?.Dispose();
+            _headerBrush = new LinearGradientBrush(
+                new Rectangle(1, 1, Math.Max(1, Width - 2), 36),
+                Color.FromArgb(68, 64, 54),
+                Color.FromArgb(38, 35, 29),
+                LinearGradientMode.Vertical);
+            _headerBrushWidth = Width;
         }
 
-        G.DrawString(Text, new Font("Tahoma", 12, FontStyle.Bold), new SolidBrush(Color.FromArgb(223, 219, 210)), new Rectangle(0, 14, Width - 1, Height), new StringFormat() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Near });
+        G.DrawRectangle(_outerBorderPen, 0, 0, Width - 1, Height - 1);
+        G.FillRectangle(_headerBrush, 1, 1, Width - 2, 36);
+        G.FillRectangle(_bodyBrush, 1, 37, Width - 2, Math.Max(0, Height - 47));
+        G.FillRectangle(_separatorBrush, 1, 37, Width - 2, 1);
+
+        if (_RoundCorners)
+        {
+            G.FillRectangle(Brushes.Fuchsia, 0, 0, 4, 1);
+            G.FillRectangle(Brushes.Fuchsia, 0, 1, 1, 3);
+            G.FillRectangle(Brushes.Fuchsia, 1, 1, 1, 1);
+            G.FillRectangle(Brushes.Black, 1, 2, 1, 2);
+            G.FillRectangle(Brushes.Black, 2, 1, 2, 1);
+
+            G.FillRectangle(Brushes.Fuchsia, Width - 4, 0, 4, 1);
+            G.FillRectangle(Brushes.Fuchsia, Width - 1, 1, 1, 3);
+            G.FillRectangle(Brushes.Fuchsia, Width - 2, 1, 1, 1);
+            G.FillRectangle(Brushes.Black, Width - 2, 2, 1, 2);
+            G.FillRectangle(Brushes.Black, Width - 4, 1, 2, 1);
+
+            G.FillRectangle(Brushes.Fuchsia, 0, Height - 4, 1, 4);
+            G.FillRectangle(Brushes.Fuchsia, 1, Height - 1, 3, 1);
+            G.FillRectangle(Brushes.Fuchsia, 1, Height - 2, 1, 1);
+            G.FillRectangle(Brushes.Black, 1, Height - 4, 1, 2);
+            G.FillRectangle(Brushes.Black, 2, Height - 2, 2, 1);
+
+            G.FillRectangle(Brushes.Fuchsia, Width - 1, Height - 4, 1, 4);
+            G.FillRectangle(Brushes.Fuchsia, Width - 4, Height - 1, 3, 1);
+            G.FillRectangle(Brushes.Fuchsia, Width - 2, Height - 2, 1, 1);
+            G.FillRectangle(Brushes.Black, Width - 2, Height - 4, 1, 2);
+            G.FillRectangle(Brushes.Black, Width - 4, Height - 2, 2, 1);
+        }
+
+        G.DrawString(Text, _titleFont, _titleBrush,
+            new Rectangle(0, 12, Width, MoveHeight), _titleFormat);
     }
 }
 
@@ -477,8 +452,6 @@ public class Ambiance_ThemeContainer : ContainerControl
 
 public class Ambiance_ControlBox : Control
 {
-    #region Enums
-
     public enum MouseState
     {
         None = 0,
@@ -486,13 +459,21 @@ public class Ambiance_ControlBox : Control
         Down = 2
     }
 
-    #endregion Enums
-    #region MouseStates
     private MouseState State = MouseState.None;
     private int X;
-    private Rectangle CloseBtn = new Rectangle(3, 2, 17, 17);
-    private Rectangle MinBtn = new Rectangle(23, 2, 17, 17);
-    private Rectangle MaxBtn = new Rectangle(43, 2, 17, 17);
+    private readonly Rectangle CloseBtn = new Rectangle(3, 2, 17, 17);
+    private readonly Rectangle MinBtn = new Rectangle(23, 2, 17, 17);
+    private readonly Rectangle MaxBtn = new Rectangle(43, 2, 17, 17);
+
+    private readonly Pen _ellipsePen = new Pen(Color.FromArgb(57, 56, 53));
+    private readonly Font _marlett = new Font("Marlett", 7f);
+    private readonly SolidBrush _symbolBrush = new SolidBrush(Color.FromArgb(52, 50, 46));
+    private readonly LinearGradientBrush _closeNorm  = new LinearGradientBrush(new Rectangle(3, 2, 17, 17), Color.FromArgb(242, 132, 99), Color.FromArgb(224, 82, 33), 90f);
+    private readonly LinearGradientBrush _closeHover = new LinearGradientBrush(new Rectangle(3, 2, 17, 17), Color.FromArgb(255, 165, 135), Color.FromArgb(240, 105, 58), 90f);
+    private readonly LinearGradientBrush _closeDown  = new LinearGradientBrush(new Rectangle(3, 2, 17, 17), Color.FromArgb(185, 68, 38), Color.FromArgb(162, 45, 18), 90f);
+    private readonly LinearGradientBrush _grayNorm   = new LinearGradientBrush(new Rectangle(3, 2, 17, 17), Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90f);
+    private readonly LinearGradientBrush _grayHover  = new LinearGradientBrush(new Rectangle(3, 2, 17, 17), Color.FromArgb(196, 196, 196), Color.FromArgb(173, 173, 173), 90f);
+    private readonly LinearGradientBrush _grayDown   = new LinearGradientBrush(new Rectangle(3, 2, 17, 17), Color.FromArgb(88, 88, 88), Color.FromArgb(68, 68, 68), 90f);
 
     protected override void OnMouseDown(System.Windows.Forms.MouseEventArgs e)
     {
@@ -549,9 +530,6 @@ public class Ambiance_ControlBox : Control
         X = e.Location.X;
         Invalidate();
     }
-    #endregion MouseStates
-    #region Properties
-
     private bool _EnableMaximize = true;
     public bool EnableMaximize
     {
@@ -559,12 +537,10 @@ public class Ambiance_ControlBox : Control
         set
         {
             _EnableMaximize = value;
-            this.Size = _EnableMaximize == true ? new Size(64, 22) : new Size(44, 22);
+            Size = _EnableMaximize ? new Size(64, 22) : new Size(44, 22);
             Invalidate();
         }
     }
-
-    #endregion Properties
 
     public Ambiance_ControlBox()
     {
@@ -575,97 +551,64 @@ public class Ambiance_ControlBox : Control
         Anchor = AnchorStyles.Top | AnchorStyles.Left;
     }
 
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _ellipsePen.Dispose();
+            _marlett.Dispose();
+            _symbolBrush.Dispose();
+            _closeNorm.Dispose();
+            _closeHover.Dispose();
+            _closeDown.Dispose();
+            _grayNorm.Dispose();
+            _grayHover.Dispose();
+            _grayDown.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        this.Size = _EnableMaximize == true ? new Size(64, 22) : new Size(44, 22);
+        Size = _EnableMaximize ? new Size(64, 22) : new Size(44, 22);
     }
 
     protected override void OnCreateControl()
     {
         base.OnCreateControl();
-        // Auto-decide control location on the theme container
         Location = new Point(5, 13);
     }
 
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
-        var B = new Bitmap(Width, Height);
-        var G = Graphics.FromImage(B);
-
         base.OnPaint(e);
-        G.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        var G = e.Graphics;
+        G.SmoothingMode = SmoothingMode.AntiAlias;
 
-        var LGBClose = new LinearGradientBrush(CloseBtn, Color.FromArgb(242, 132, 99), Color.FromArgb(224, 82, 33), 90);
-        G.FillEllipse(LGBClose, CloseBtn);
-        G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), CloseBtn);
-        G.DrawString("r", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle((int)6.5, 8, 0, 0));
+        var isClose = X > 3 && X < 20;
+        var isMin   = X > 23 && X < 40;
+        var isMax   = X > 43 && X < 60;
+        var isDown  = State == MouseState.Down;
+        var isOver  = State != MouseState.None;
 
-        var LGBMinimize = new LinearGradientBrush(MinBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
-        G.FillEllipse(LGBMinimize, MinBtn);
-        G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MinBtn);
-        G.DrawString("0", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(26, (int)4.4, 0, 0));
+        var closeBrush = isDown && isClose ? _closeDown : isOver && isClose ? _closeHover : _closeNorm;
+        G.FillEllipse(closeBrush, CloseBtn);
+        G.DrawEllipse(_ellipsePen, CloseBtn);
+        G.DrawString("r", _marlett, _symbolBrush, new Rectangle(6, 8, 0, 0));
 
-        if (_EnableMaximize == true)
+        var minBrush = isDown && isMin ? _grayDown : isOver && isMin ? _grayHover : _grayNorm;
+        G.FillEllipse(minBrush, MinBtn);
+        G.DrawEllipse(_ellipsePen, MinBtn);
+        G.DrawString("0", _marlett, _symbolBrush, new Rectangle(26, 4, 0, 0));
+
+        if (_EnableMaximize)
         {
-            var LGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
-            G.FillEllipse(LGBMaximize, MaxBtn);
-            G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MaxBtn);
-            G.DrawString("1", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(46, 7, 0, 0));
+            var maxBrush = isDown && isMax ? _grayDown : isOver && isMax ? _grayHover : _grayNorm;
+            G.FillEllipse(maxBrush, MaxBtn);
+            G.DrawEllipse(_ellipsePen, MaxBtn);
+            G.DrawString("1", _marlett, _symbolBrush, new Rectangle(46, 7, 0, 0));
         }
-
-        switch (State)
-        {
-            case MouseState.None:
-                var xLGBClose_1 = new LinearGradientBrush(CloseBtn, Color.FromArgb(242, 132, 99), Color.FromArgb(224, 82, 33), 90);
-                G.FillEllipse(xLGBClose_1, CloseBtn);
-                G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), CloseBtn);
-                G.DrawString("r", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle((int)6.5, 8, 0, 0));
-
-                var xLGBMinimize_1 = new LinearGradientBrush(MinBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
-                G.FillEllipse(xLGBMinimize_1, MinBtn);
-                G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MinBtn);
-                G.DrawString("0", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(26, (int)4.4, 0, 0));
-
-                if (_EnableMaximize == true)
-                {
-                    var xLGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(130, 129, 123), Color.FromArgb(103, 102, 96), 90);
-                    G.FillEllipse(xLGBMaximize, MaxBtn);
-                    G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MaxBtn);
-                    G.DrawString("1", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(46, 7, 0, 0));
-                }
-                break;
-            case MouseState.Over:
-                if (X > 3 && X < 20)
-                {
-                    var xLGBClose = new LinearGradientBrush(CloseBtn, Color.FromArgb(248, 152, 124), Color.FromArgb(231, 92, 45), 90);
-                    G.FillEllipse(xLGBClose, CloseBtn);
-                    G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), CloseBtn);
-                    G.DrawString("r", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle((int)6.5, 8, 0, 0));
-                }
-                else if (X > 23 && X < 40)
-                {
-                    var xLGBMinimize = new LinearGradientBrush(MinBtn, Color.FromArgb(196, 196, 196), Color.FromArgb(173, 173, 173), 90);
-                    G.FillEllipse(xLGBMinimize, MinBtn);
-                    G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MinBtn);
-                    G.DrawString("0", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(26, (int)4.4, 0, 0));
-                }
-                else if (X > 43 && X < 60)
-                {
-                    if (_EnableMaximize == true)
-                    {
-                        var xLGBMaximize = new LinearGradientBrush(MaxBtn, Color.FromArgb(196, 196, 196), Color.FromArgb(173, 173, 173), 90);
-                        G.FillEllipse(xLGBMaximize, MaxBtn);
-                        G.DrawEllipse(new Pen(Color.FromArgb(57, 56, 53)), MaxBtn);
-                        G.DrawString("1", new Font("Marlett", 7), new SolidBrush(Color.FromArgb(52, 50, 46)), new Rectangle(46, 7, 0, 0));
-                    }
-                }
-                break;
-        }
-
-        e.Graphics.DrawImage((Image)B.Clone(), 0, 0);
-        G.Dispose();
-        B.Dispose();
     }
 }
 
@@ -849,6 +792,10 @@ internal class Ambiance_Button_1 : Control
 
     #endregion EventArgs
 
+    private SolidBrush _textBrush;
+    private Color _cachedTextColor;
+    private readonly StringFormat _textFormat = new StringFormat { LineAlignment = StringAlignment.Center };
+
     public Ambiance_Button_1()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor | ControlStyles.UserPaint, true);
@@ -860,20 +807,40 @@ internal class Ambiance_Button_1 : Control
         Size = new Size(177, 30);
         _TextAlignment = StringAlignment.Center;
         P1 = new Pen(Color.FromArgb(180, 180, 180));
-        // P1 = Border color
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _textBrush?.Dispose();
+            _textFormat.Dispose();
+            Shape?.Dispose();
+            InactiveGB?.Dispose();
+            PressedGB?.Dispose();
+            PressedContourGB?.Dispose();
+            P1?.Dispose();
+            P3?.Dispose();
+        }
+        base.Dispose(disposing);
     }
 
     protected override void OnResize(System.EventArgs e)
     {
         if (Width > 0 && Height > 0)
         {
+            Shape?.Dispose();
             Shape = new GraphicsPath();
             R1 = new Rectangle(0, 0, Width, Height);
+
+            InactiveGB?.Dispose();
+            PressedGB?.Dispose();
+            PressedContourGB?.Dispose();
+            P3?.Dispose();
 
             InactiveGB = new LinearGradientBrush(new Rectangle(0, 0, Width, Height), Color.FromArgb(253, 252, 252), Color.FromArgb(239, 237, 236), 90f);
             PressedGB = new LinearGradientBrush(new Rectangle(0, 0, Width, Height), Color.FromArgb(226, 226, 226), Color.FromArgb(237, 237, 237), 90f);
             PressedContourGB = new LinearGradientBrush(new Rectangle(0, 0, Width, Height), Color.FromArgb(167, 167, 167), Color.FromArgb(167, 167, 167), 90f);
-
             P3 = new Pen(PressedContourGB);
         }
 
@@ -889,60 +856,34 @@ internal class Ambiance_Button_1 : Control
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        if (_textBrush == null || _cachedTextColor != ForeColor)
+        {
+            _textBrush?.Dispose();
+            _cachedTextColor = ForeColor;
+            _textBrush = new SolidBrush(ForeColor);
+        }
+
         var G = e.Graphics;
         G.SmoothingMode = SmoothingMode.HighQuality;
         var ipt = ImageLocation(GetStringFormat(ImageAlign), Size, ImageSize);
 
+        _textFormat.Alignment = _TextAlignment;
+
         switch (MouseState)
         {
             case 0:
-                //Inactive
                 G.FillPath(InactiveGB, Shape);
-                // Fill button body with InactiveGB color gradient
                 G.DrawPath(P1, Shape);
-                // Draw button border [InactiveGB]
-                if (Image == null)
-                {
-                    G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
-                    {
-                        Alignment = _TextAlignment,
-                        LineAlignment = StringAlignment.Center
-                    });
-                }
-                else
-                {
+                if (Image != null)
                     G.DrawImage(_Image, ipt.X, ipt.Y, ImageSize.Width, ImageSize.Height);
-                    G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
-                    {
-                        Alignment = _TextAlignment,
-                        LineAlignment = StringAlignment.Center
-                    });
-                }
+                G.DrawString(Text, Font, _textBrush, R1, _textFormat);
                 break;
             case 1:
-                //Pressed
                 G.FillPath(PressedGB, Shape);
-                // Fill button body with PressedGB color gradient
                 G.DrawPath(P3, Shape);
-                // Draw button border [PressedGB]
-
-                if (Image == null)
-                {
-                    G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
-                    {
-                        Alignment = _TextAlignment,
-                        LineAlignment = StringAlignment.Center
-                    });
-                }
-                else
-                {
+                if (Image != null)
                     G.DrawImage(_Image, ipt.X, ipt.Y, ImageSize.Width, ImageSize.Height);
-                    G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
-                    {
-                        Alignment = _TextAlignment,
-                        LineAlignment = StringAlignment.Center
-                    });
-                }
+                G.DrawString(Text, Font, _textBrush, R1, _textFormat);
                 break;
         }
         base.OnPaint(e);
@@ -1129,6 +1070,10 @@ internal class Ambiance_Button_2 : Control
 
     #endregion EventArgs
 
+    private SolidBrush _textBrush;
+    private Color _cachedTextColor;
+    private readonly StringFormat _textFormat = new StringFormat { LineAlignment = StringAlignment.Center };
+
     public Ambiance_Button_2()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor | ControlStyles.UserPaint, true);
@@ -1140,20 +1085,40 @@ internal class Ambiance_Button_2 : Control
         Size = new Size(177, 30);
         _TextAlignment = StringAlignment.Center;
         P1 = new Pen(Color.FromArgb(162, 120, 101));
-        // P1 = Border color
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _textBrush?.Dispose();
+            _textFormat.Dispose();
+            Shape?.Dispose();
+            InactiveGB?.Dispose();
+            PressedGB?.Dispose();
+            PressedContourGB?.Dispose();
+            P1?.Dispose();
+            P3?.Dispose();
+        }
+        base.Dispose(disposing);
     }
 
     protected override void OnResize(System.EventArgs e)
     {
         if (Width > 0 && Height > 0)
         {
+            Shape?.Dispose();
             Shape = new GraphicsPath();
             R1 = new Rectangle(0, 0, Width, Height);
+
+            InactiveGB?.Dispose();
+            PressedGB?.Dispose();
+            PressedContourGB?.Dispose();
+            P3?.Dispose();
 
             InactiveGB = new LinearGradientBrush(new Rectangle(0, 0, Width, Height), Color.FromArgb(253, 175, 143), Color.FromArgb(244, 146, 106), 90f);
             PressedGB = new LinearGradientBrush(new Rectangle(0, 0, Width, Height), Color.FromArgb(244, 146, 106), Color.FromArgb(244, 146, 106), 90f);
             PressedContourGB = new LinearGradientBrush(new Rectangle(0, 0, Width, Height), Color.FromArgb(162, 120, 101), Color.FromArgb(162, 120, 101), 90f);
-
             P3 = new Pen(PressedContourGB);
         }
 
@@ -1169,60 +1134,34 @@ internal class Ambiance_Button_2 : Control
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        if (_textBrush == null || _cachedTextColor != ForeColor)
+        {
+            _textBrush?.Dispose();
+            _cachedTextColor = ForeColor;
+            _textBrush = new SolidBrush(ForeColor);
+        }
+
         var G = e.Graphics;
         G.SmoothingMode = SmoothingMode.HighQuality;
         var ipt = ImageLocation(GetStringFormat(ImageAlign), Size, ImageSize);
 
+        _textFormat.Alignment = _TextAlignment;
+
         switch (MouseState)
         {
             case 0:
-                //Inactive
                 G.FillPath(InactiveGB, Shape);
-                // Fill button body with InactiveGB color gradient
                 G.DrawPath(P1, Shape);
-                // Draw button border [InactiveGB]
-                if (Image == null)
-                {
-                    G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
-                    {
-                        Alignment = _TextAlignment,
-                        LineAlignment = StringAlignment.Center
-                    });
-                }
-                else
-                {
+                if (Image != null)
                     G.DrawImage(_Image, ipt.X, ipt.Y, ImageSize.Width, ImageSize.Height);
-                    G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
-                    {
-                        Alignment = _TextAlignment,
-                        LineAlignment = StringAlignment.Center
-                    });
-                }
+                G.DrawString(Text, Font, _textBrush, R1, _textFormat);
                 break;
             case 1:
-                //Pressed
                 G.FillPath(PressedGB, Shape);
-                // Fill button body with PressedGB color gradient
                 G.DrawPath(P3, Shape);
-                // Draw button border [PressedGB]
-
-                if (Image == null)
-                {
-                    G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
-                    {
-                        Alignment = _TextAlignment,
-                        LineAlignment = StringAlignment.Center
-                    });
-                }
-                else
-                {
+                if (Image != null)
                     G.DrawImage(_Image, ipt.X, ipt.Y, ImageSize.Width, ImageSize.Height);
-                    G.DrawString(Text, Font, new SolidBrush(ForeColor), R1, new StringFormat
-                    {
-                        Alignment = _TextAlignment,
-                        LineAlignment = StringAlignment.Center
-                    });
-                }
+                G.DrawString(Text, Font, _textBrush, R1, _textFormat);
                 break;
         }
         base.OnPaint(e);

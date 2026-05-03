@@ -1,7 +1,4 @@
-﻿// ============================ FormAudioSpectrum.cs ============================
-// Developed by Gehan Fernando (optimized + UI-safe)
-
-using System;
+﻿using System;
 using System.Configuration;
 using System.Drawing;
 using System.Runtime.CompilerServices;
@@ -13,15 +10,13 @@ namespace Spectrum;
 public partial class FormAudioSpectrum : Form
 {
     private const int BAR_COUNT = 83;
-    private const int NOISE_GATE_THRESHOLD = 2; // was 6 — high-freq bars have low energy; gate was killing real signal
+    private const int NOISE_GATE_THRESHOLD = 2;
 
     private VerticalProgressBar[] _progressBars;
     private string _visualMode;
     private readonly byte[] _spectrumBuffer;
-    // Second buffer for lock-protected read in ApplySpectrumToUI (avoids race with background writes)
     private readonly byte[] _applyBuffer;
 
-    // Coalescing mechanism to prevent BeginInvoke flooding
     private volatile bool _updatePending;
     private readonly object _updateLock = new();
 
@@ -61,10 +56,8 @@ public partial class FormAudioSpectrum : Form
         _analyzer = new Analyzer();
         Analyzer.OnChange += Spectrum_Change;
 
-        // Re-run layout after first paint — Dock=Fill may not have fully resolved during Load
         Shown += (s, e) => RecalculateBarLayout();
 
-        // Keep the window in bounds when the user changes screen resolution or DPI
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         Taskbar.SetState(Handle, Taskbar.TaskbarStates.NoProgress);
@@ -87,7 +80,7 @@ public partial class FormAudioSpectrum : Form
                     Maximum = 255,
                     Name = $"ProgressBar_{i + 1:D2}",
                     Tag = $"{visualMode}|{i + 1}",
-                    Size = new Size(14, 320),         // placeholder; RecalculateBarLayout corrects below
+                    Size = new Size(14, 320),
                     Location = new Point(11 + i * 13, 50),
                     Visible = true
                 };
@@ -103,14 +96,9 @@ public partial class FormAudioSpectrum : Form
             ambiance_ThemeSpectrum.ResumeLayout(false);
         }
 
-        // Apply DPI-aware positions immediately — handles startup on non-96-DPI monitors
         RecalculateBarLayout();
     }
 
-    // ========================= Layout =========================
-
-    // Called on DPI change or resolution change; scales bar positions to the container's
-    // current pixel size so bars always fill the window correctly.
     private void RecalculateBarLayout()
     {
         if (_progressBars == null) return;
@@ -125,9 +113,9 @@ public partial class FormAudioSpectrum : Form
 
         // Keep a margin on both sides that scales with the container width.
         // Float stride within the available area so all 83 bars fit exactly, with no side overflow.
-        var marginX  = Math.Max(4, (int)Math.Round(11f * (float)cw / 1184f));
-        var availW   = cw - 2 * marginX;
-        var strideF  = (float)availW / BAR_COUNT;
+        var marginX = Math.Max(4, (int)Math.Round(11f * (float)cw / 1184f));
+        var availW  = cw - 2 * marginX;
+        var strideF = (float)availW / BAR_COUNT;
 
         ambiance_ThemeSpectrum.SuspendLayout();
         try
@@ -146,29 +134,24 @@ public partial class FormAudioSpectrum : Form
         }
     }
 
-    // ========================= Display settings / DPI =========================
-
     private const int WM_DPICHANGED = 0x02E0;
 
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);
 
-        // WM_DPICHANGED: Windows has already resized the form — re-fit bars to the new pixel size
         if (m.Msg == WM_DPICHANGED)
             RecalculateBarLayout();
     }
 
     private void OnDisplaySettingsChanged(object sender, EventArgs e)
     {
-        // DisplaySettingsChanged fires on a background thread — marshal to UI thread
         if (InvokeRequired)
         {
             Invoke(new Action(() => OnDisplaySettingsChanged(sender, e)));
             return;
         }
 
-        // Keep the window fully visible within the working area of whichever screen it is on
         var screen = Screen.FromControl(this);
         var wa = screen.WorkingArea;
 
@@ -177,7 +160,6 @@ public partial class FormAudioSpectrum : Form
         if (newLeft != Left || newTop != Top)
             Location = new Point(newLeft, newTop);
 
-        // Re-fit bars in case the form was rescaled by the OS
         RecalculateBarLayout();
     }
 
@@ -189,8 +171,6 @@ public partial class FormAudioSpectrum : Form
         var spectrum = e.Spectrumdata;
         if (spectrum == null || spectrum.Count == 0) return;
 
-        // Copy inside lock: Analyzer now fires from a thread-pool thread (System.Timers.Timer),
-        // so _spectrumBuffer must be guarded against concurrent reads in ApplySpectrumToUI.
         lock (_updateLock)
         {
             if (_updatePending) return;
@@ -215,15 +195,12 @@ public partial class FormAudioSpectrum : Form
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ApplySpectrumToUI()
     {
-        // Snapshot under lock so a concurrent background tick cannot stomp _spectrumBuffer
-        // while we iterate it below.
         lock (_updateLock)
         {
             _updatePending = false;
             Buffer.BlockCopy(_spectrumBuffer, 0, _applyBuffer, 0, BAR_COUNT);
         }
 
-        // No SuspendLayout here. Bars are fixed; layout work is wasted per frame.
         for (var i = 0; i < BAR_COUNT; i++)
         {
             _progressBars[i].SetTargetValueUI(_applyBuffer[i]);
@@ -233,15 +210,12 @@ public partial class FormAudioSpectrum : Form
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void ApplyMeterPresetOptimized(VerticalProgressBar progress, string mode)
     {
-        // Shared visuals (not part of standards)
         progress.AnimationFps = 60;
         progress.TopEmphasisStart = 0.88f;
         progress.TopEmphasisStrength = 0.60f;
         progress.HeatIntensityCurve = 1.85f;
         progress.PeakLineThickness = 2;
 
-        // Safe defaults
-        progress.SnapUpThreshold = 0;
         progress.PeakDecayPerTick = 1.15f;
 
         mode = (mode ?? string.Empty).Trim().ToLowerInvariant();
@@ -249,17 +223,17 @@ public partial class FormAudioSpectrum : Form
         switch (mode)
         {
             case "bricks":
-                progress.UseAsymmetricBallistics = false; // symmetric behavior
-                progress.ResponseTimeMs = 65;            // τ ≈ 65 ms
-                progress.ReleaseTimeMs = 65;             // explicit (not used when asymmetric=false)
-                progress.PeakHoldMilliseconds = 0;       // VU is not a peak meter
+                progress.UseAsymmetricBallistics = true;
+                progress.ResponseTimeMs = 110;
+                progress.ReleaseTimeMs = 220;
+                progress.PeakHoldMilliseconds = 0;
                 break;
 
             case "dots":
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 5;            // fast integration (≈ IEC Type I)
-                progress.ReleaseTimeMs = 738;           // τ from 20 dB in 1.7 s
-                progress.PeakHoldMilliseconds = 0;      // standards do not require peak-hold
+                progress.ResponseTimeMs = 130;
+                progress.ReleaseTimeMs = 480;
+                progress.PeakHoldMilliseconds = 0;
                 break;
 
             case "led":
@@ -273,43 +247,43 @@ public partial class FormAudioSpectrum : Form
             case "bbc":
             case "ebu":
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 10;           // integration (≈ IEC Type II)
-                progress.ReleaseTimeMs = 1013;          // τ from 24 dB in 2.8 s
-                progress.PeakHoldMilliseconds = 0;      // standards do not require peak-hold
+                progress.ResponseTimeMs = 90;
+                progress.ReleaseTimeMs = 280;
+                progress.PeakHoldMilliseconds = 0;
                 break;
 
             case "center":
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 90;
-                progress.ReleaseTimeMs = 650;
+                progress.ResponseTimeMs = 120;
+                progress.ReleaseTimeMs = 260;
                 progress.PeakHoldMilliseconds = 0;
                 break;
 
             case "mirror":
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 80;
-                progress.ReleaseTimeMs = 650;
+                progress.ResponseTimeMs = 120;
+                progress.ReleaseTimeMs = 260;
                 progress.PeakHoldMilliseconds = 0;
                 break;
 
             case "wave":
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 60;
-                progress.ReleaseTimeMs = 500;
-                progress.PeakHoldMilliseconds = 100;
+                progress.ResponseTimeMs = 110;
+                progress.ReleaseTimeMs = 340;
+                progress.PeakHoldMilliseconds = 120;
                 break;
 
             case "pulse":
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 140;
-                progress.ReleaseTimeMs = 900;
+                progress.ResponseTimeMs = 130;
+                progress.ReleaseTimeMs = 400;
                 progress.PeakHoldMilliseconds = 0;
                 break;
 
             default:
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 7;
-                progress.ReleaseTimeMs = 300;
+                progress.ResponseTimeMs = 110;
+                progress.ReleaseTimeMs = 280;
                 progress.PeakHoldMilliseconds = 300;
                 break;
         }

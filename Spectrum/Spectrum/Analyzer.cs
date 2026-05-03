@@ -1,6 +1,4 @@
-﻿// Developed by Gehan
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -25,47 +23,40 @@ public sealed class Analyzer : IDisposable
 {
     public static event OnChangeHandler OnChange;
 
-    // You call BASS_DATA_FFT16384 -> FFT length is 16384 (half-spectrum bins = 8192)
     private const int FFT_LEN = 16384;
-    private const int FFT_HALF_BINS = FFT_LEN / 2; // 8192
-    private const int FFT_SIZE = FFT_HALF_BINS;    // keep your naming
+    private const int FFT_HALF_BINS = FFT_LEN / 2;
+    private const int FFT_SIZE = FFT_HALF_BINS;
     private const int LINES = 83;
 
-    // Desired display range
     private const float MIN_HZ = 20f;
     private const float MAX_HZ = 20000f;
 
-    private const int TIMER_INTERVAL_MS = 25; // ~40fps
-    private const int HANG_THRESHOLD = 8; // 8 × 25ms = 200ms; avoids false resets on sustained audio
+    private const int TIMER_INTERVAL_MS = 25;
+    private const int HANG_THRESHOLD = 8;
     private const int SILENCE_FRAMES_REQUIRED = 4;
 
     private const double RMS_MULTIPLIER = 3.0 * 255.0;
     private const double RMS_OFFSET = 4.0;
 
-    // Analyzer-side smoothing
-    private const float SMOOTHING_FACTOR = 0.45f;
+    private const float SMOOTHING_FACTOR = 0.20f;
 
-    // Silence fade characteristics
-    private const float SILENCE_FADE_MULT = 0.80f; // per tick
+    private const float SILENCE_FADE_MULT = 0.80f;
     private const float SILENCE_SNAP_TO_ZERO = 0.50f;
 
-    private readonly Timer _timer; // System.Timers.Timer fires on thread-pool, not blocked by UI message pump
+    private readonly Timer _timer;
     private readonly float[] _fft;
-    private int[] _bandEdges; // rebuilt after WASAPI init / re-init
+    private int[] _bandEdges;
     private readonly float[] _smoothedSpectrum;
     private readonly byte[] _spectrumData;
 
-    // Pre-allocated fire buffer — avoids new byte[LINES] + new OnChangeEventArgs on every tick
     private readonly byte[] _fireData;
     private readonly OnChangeEventArgs _fireEventArgs;
 
     private readonly WASAPIPROC _process;
     private static readonly object _sender = new();
 
-    // SynchronizationContext captured on construction (UI thread) for marshalling device recovery
     private readonly SynchronizationContext _syncContext;
 
-    // Windows audio endpoint notification — detects default device changes (speaker ↔ headset etc.)
     private NAudio.CoreAudioApi.MMDeviceEnumerator _mmEnumerator;
     private DeviceNotificationClient _deviceNotificationClient;
 
@@ -95,12 +86,10 @@ public sealed class Analyzer : IDisposable
         _fireData = new byte[LINES];
         _fireEventArgs = new OnChangeEventArgs(_fireData);
 
-        // Temporary placeholder until we know actual sample rate from WASAPI
         _bandEdges = BuildBandsUpper_LogHz(LINES, FFT_SIZE, _sampleRate, MIN_HZ, MAX_HZ);
 
         _process = Process;
 
-        // AutoReset=false: each tick re-arms itself, preventing overlapping ticks on the thread pool
         _timer = new Timer { Interval = TIMER_INTERVAL_MS, AutoReset = false };
         _timer.Elapsed += TimerTick;
 
@@ -110,21 +99,15 @@ public sealed class Analyzer : IDisposable
         _ = DeviceList();
         Enable(true);
 
-        // Register for Windows audio endpoint notifications so we detect speaker ↔ headset switches
-        // at runtime without requiring an app restart.
         try
         {
             _mmEnumerator = new NAudio.CoreAudioApi.MMDeviceEnumerator();
             _deviceNotificationClient = new DeviceNotificationClient(OnAudioDeviceChanged);
             _mmEnumerator.RegisterEndpointNotificationCallback(_deviceNotificationClient);
         }
-        catch
-        {
-            // Non-fatal: hot-device-switching detection unavailable, core capture still works
-        }
+        catch { }
     }
 
-    // Fired by Windows (on a COM thread) when the user changes the default playback device.
     private void OnAudioDeviceChanged()
     {
         if (_disposed || _recovering) return;
@@ -140,7 +123,7 @@ public sealed class Analyzer : IDisposable
                 Free();
                 _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
                 _initialized = false;
-                _ = DeviceList(); // re-scan: picks the loopback for the new default device
+                _ = DeviceList();
                 _recovering = false;
                 Enable(true);
             }, null);
@@ -156,10 +139,9 @@ public sealed class Analyzer : IDisposable
     {
         var upper = new int[lines];
 
-        // Clamp to valid spectrum (Nyquist)
         var nyquist = sampleRate * 0.5f;
         var lo = Math.Max(1f, minHz);
-        var hi = Math.Max(lo + 1f, Math.Min(maxHz, nyquist)); // ensure hi > lo
+        var hi = Math.Max(lo + 1f, Math.Min(maxHz, nyquist));
 
         var logLo = Math.Log10(lo);
         var logHi = Math.Log10(hi);
@@ -172,24 +154,11 @@ public sealed class Analyzer : IDisposable
             var t = (double)x / denom;
             var hz = Math.Pow(10.0, logLo + ((logHi - logLo) * t));
 
-            // Hz -> bin index (half spectrum bins are 0..FFT_LEN/2)
             var bin = (int)Math.Round(hz * FFT_LEN / sampleRate);
 
-            if (bin < 1)
-            {
-                bin = 1;
-            }
-
-            if (bin > maxBin)
-            {
-                bin = maxBin;
-            }
-
-            // enforce strictly increasing edges so no empty bands
-            if (bin <= prev)
-            {
-                bin = Math.Min(prev + 1, maxBin);
-            }
+            if (bin < 1) bin = 1;
+            if (bin > maxBin) bin = maxBin;
+            if (bin <= prev) bin = Math.Min(prev + 1, maxBin);
 
             upper[x] = bin;
             prev = bin;
@@ -260,7 +229,6 @@ public sealed class Analyzer : IDisposable
                     return;
                 }
 
-                // Get actual device sample-rate and rebuild band edges for 20..20k
                 try
                 {
                     var info = BassWasapi.BASS_WASAPI_GetInfo();
@@ -280,7 +248,7 @@ public sealed class Analyzer : IDisposable
             }
 
             _ = BassWasapi.BASS_WASAPI_Start();
-            _timer.Start(); // no sleep — WASAPI buffers audio; UI no longer blocked at startup
+            _timer.Start();
         }
         else
         {
@@ -311,7 +279,6 @@ public sealed class Analyzer : IDisposable
 
         try
         {
-            // No Array.Clear: BASS fills the buffer
             var ret = BassWasapi.BASS_WASAPI_GetData(_fft, (int)BASSData.BASS_DATA_FFT16384);
 
             if (ret < 0)
@@ -343,7 +310,6 @@ public sealed class Analyzer : IDisposable
         }
         finally
         {
-            // Re-arm the one-shot timer so the next tick fires after this one completes
             if (!_disposed && !_recovering)
             {
                 try { _timer.Start(); }
@@ -397,7 +363,7 @@ public sealed class Analyzer : IDisposable
         for (var x = 0; x < LINES; x++)
         {
             var b1 = _bandEdges[x];
-            if (b1 >= FFT_SIZE) // >= not >: max inner-loop index is fftOffset+(b1-1)=b1, must be < FFT_SIZE
+            if (b1 >= FFT_SIZE)
             {
                 b1 = FFT_SIZE - 1;
             }
@@ -423,8 +389,8 @@ public sealed class Analyzer : IDisposable
 
             var clamped = rawValue > 255 ? 255 : (rawValue < 0 ? 0 : rawValue);
 
-            _smoothedSpectrum[x] = (_smoothedSpectrum[x] * SMOOTHING_FACTOR) +
-                                   (clamped * (1.0f - SMOOTHING_FACTOR));
+            _smoothedSpectrum[x] = _smoothedSpectrum[x] * SMOOTHING_FACTOR
+                                 + clamped * (1.0f - SMOOTHING_FACTOR);
 
             var finalValue = (byte)_smoothedSpectrum[x];
             _spectrumData[x] = finalValue;
@@ -466,9 +432,8 @@ public sealed class Analyzer : IDisposable
         {
             _hangCounter = 0;
             _consecutiveZeroLevels = 0;
-            _recovering = true; // stops the timer from re-arming in the finally block
+            _recovering = true;
 
-            // BASS init/free must run on the UI thread; marshal via SynchronizationContext
             var ctx = _syncContext;
             if (ctx != null)
             {
@@ -479,12 +444,11 @@ public sealed class Analyzer : IDisposable
                     _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
                     _initialized = false;
                     _recovering = false;
-                    Enable(true); // re-init will rebuild _bandEdges with actual device sample rate
+                    Enable(true);
                 }, null);
             }
             else
             {
-                // Fallback: no sync context (shouldn't happen in normal WinForms usage)
                 Free();
                 _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
                 _initialized = false;
@@ -503,7 +467,6 @@ public sealed class Analyzer : IDisposable
 
         _disposed = true;
 
-        // Unregister audio endpoint notifications before stopping anything else
         if (_mmEnumerator != null)
         {
             try
@@ -526,10 +489,6 @@ public sealed class Analyzer : IDisposable
         OnChange = null;
     }
 
-    // ========================= Audio endpoint notification client =========================
-
-    // Listens for the Windows default playback device changing (speaker ↔ headset etc.)
-    // and triggers an Analyzer re-init on the UI thread so capture follows the new device.
     private sealed class DeviceNotificationClient : NAudio.CoreAudioApi.Interfaces.IMMNotificationClient
     {
         private readonly Action _onDefaultChanged;
@@ -542,7 +501,6 @@ public sealed class Analyzer : IDisposable
             NAudio.CoreAudioApi.Role role,
             string defaultDeviceId)
         {
-            // Only react to the primary (Multimedia) render device — the one used for music
             if (flow == NAudio.CoreAudioApi.DataFlow.Render &&
                 role == NAudio.CoreAudioApi.Role.Multimedia)
             {
