@@ -36,7 +36,7 @@ public sealed class Analyzer : IDisposable
     private const float MAX_HZ = 20000f;
 
     private const int TIMER_INTERVAL_MS = 25; // ~40fps
-    private const int HANG_THRESHOLD = 3;
+    private const int HANG_THRESHOLD = 8; // 8 × 25ms = 200ms; avoids false resets on sustained audio
     private const int SILENCE_FRAMES_REQUIRED = 4;
 
     private const double RMS_MULTIPLIER = 3.0 * 255.0;

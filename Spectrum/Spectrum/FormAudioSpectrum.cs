@@ -61,6 +61,9 @@ public partial class FormAudioSpectrum : Form
         _analyzer = new Analyzer();
         Analyzer.OnChange += Spectrum_Change;
 
+        // Re-run layout after first paint — Dock=Fill may not have fully resolved during Load
+        Shown += (s, e) => RecalculateBarLayout();
+
         // Keep the window in bounds when the user changes screen resolution or DPI
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
