@@ -30,7 +30,6 @@
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(FormAudioSpectrum));
             this.ambiance_ThemeSpectrum = new Ambiance_ThemeContainer();
-            this.ambiance_LabelDeveloper = new Ambiance_Label();
             this.ambiance_ControlBox = new Ambiance_ControlBox();
             this.ambiance_ThemeSpectrum.SuspendLayout();
             this.SuspendLayout();
@@ -39,7 +38,6 @@
             // 
             this.ambiance_ThemeSpectrum.BackColor = System.Drawing.Color.Black;
             this.ambiance_ThemeSpectrum.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
-            this.ambiance_ThemeSpectrum.Controls.Add(this.ambiance_LabelDeveloper);
             this.ambiance_ThemeSpectrum.Controls.Add(this.ambiance_ControlBox);
             this.ambiance_ThemeSpectrum.Dock = System.Windows.Forms.DockStyle.Fill;
             this.ambiance_ThemeSpectrum.Font = new System.Drawing.Font("Segoe UI", 9F);
@@ -48,23 +46,11 @@
             this.ambiance_ThemeSpectrum.Padding = new System.Windows.Forms.Padding(20, 56, 20, 16);
             this.ambiance_ThemeSpectrum.RoundCorners = true;
             this.ambiance_ThemeSpectrum.Sizable = false;
-            this.ambiance_ThemeSpectrum.Size = new System.Drawing.Size(1100, 378);
+            this.ambiance_ThemeSpectrum.Size = new System.Drawing.Size(1184, 378);
             this.ambiance_ThemeSpectrum.SmartBounds = true;
-            this.ambiance_ThemeSpectrum.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            this.ambiance_ThemeSpectrum.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
             this.ambiance_ThemeSpectrum.TabIndex = 0;
             this.ambiance_ThemeSpectrum.Text = "Audio Spectrum Analyzer";
-            // 
-            // ambiance_LabelDeveloper
-            // 
-            this.ambiance_LabelDeveloper.AutoSize = true;
-            this.ambiance_LabelDeveloper.BackColor = System.Drawing.Color.Transparent;
-            this.ambiance_LabelDeveloper.Font = new System.Drawing.Font("Consolas", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.ambiance_LabelDeveloper.ForeColor = System.Drawing.Color.DimGray;
-            this.ambiance_LabelDeveloper.Location = new System.Drawing.Point(857, 20);
-            this.ambiance_LabelDeveloper.Name = "ambiance_LabelDeveloper";
-            this.ambiance_LabelDeveloper.Size = new System.Drawing.Size(231, 15);
-            this.ambiance_LabelDeveloper.TabIndex = 5;
-            this.ambiance_LabelDeveloper.Text = "Developed by ::. Gehan Fernando.";
             // 
             // ambiance_ControlBox
             // 
@@ -78,11 +64,11 @@
             // 
             // FormAudioSpectrum
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(14F, 31F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.Black;
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
-            this.ClientSize = new System.Drawing.Size(1101, 378);
+            this.ClientSize = new System.Drawing.Size(1184, 378);
             this.Controls.Add(this.ambiance_ThemeSpectrum);
             this.Font = new System.Drawing.Font("Consolas", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
@@ -97,7 +83,6 @@
             this.Load += new System.EventHandler(this.FormAudioSpectrum_Load);
             this.KeyUp += new System.Windows.Forms.KeyEventHandler(this.FormAudioSpectrum_KeyUp);
             this.ambiance_ThemeSpectrum.ResumeLayout(false);
-            this.ambiance_ThemeSpectrum.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -105,7 +90,6 @@
         #endregion
         private Ambiance_ThemeContainer ambiance_ThemeSpectrum;
         private Ambiance_ControlBox ambiance_ControlBox;
-        private Ambiance_Label ambiance_LabelDeveloper;
     }
 }
 

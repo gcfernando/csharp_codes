@@ -18,7 +18,14 @@ public sealed class VerticalProgressBar : ProgressBar
 {
     // ========================= Shared timer for all instances =========================
     private static readonly object s_lock = new();
-    private static System.Windows.Forms.Timer s_timer;
+    private static volatile System.Windows.Forms.Timer s_timer;
+
+    // Pre-built colors for inactive (dim) bricks — avoid Color.FromArgb in the paint hot path
+    private static readonly Color s_inactiveBrickColor   = Color.FromArgb(30, 255, 255, 255);
+    private static readonly Color s_inactiveDotColor     = Color.FromArgb(20, 255, 255, 255);
+    private static readonly Color s_inactivePulseColor   = Color.FromArgb(22, 255, 255, 255);
+    private static readonly Color s_inactiveSpectrumColor = Color.FromArgb(16, 255, 255, 255);
+    private static readonly Color s_waveBackgroundColor  = Color.FromArgb(18, 255, 255, 255);
     private static readonly List<WeakReference<VerticalProgressBar>> s_instances = new(128);
 
     private static readonly Stopwatch s_stopwatch = Stopwatch.StartNew();
@@ -385,6 +392,10 @@ public sealed class VerticalProgressBar : ProgressBar
     {
         if (IsDisposed) return;
         _targetValue = Clamp(value, Minimum, Maximum);
+        // Avoid lock overhead on every bar update when the animation timer is already running.
+        // s_timer is volatile so the read is safe without the lock.
+        var t = s_timer;
+        if (t != null && t.Enabled) return;
         EnsureTimerConfigured();
     }
 
@@ -508,7 +519,7 @@ public sealed class VerticalProgressBar : ProgressBar
             }
             else
             {
-                _workBrush.Color = Color.FromArgb(30, 255, 255, 255);
+                _workBrush.Color = s_inactiveBrickColor;
                 g.FillRectangle(_workBrush, brickRect);
             }
         }
@@ -535,7 +546,7 @@ public sealed class VerticalProgressBar : ProgressBar
             g.FillEllipse(_workBrush, x, y, dotSize, dotSize);
         }
 
-        _workBrush.Color = Color.FromArgb(20, 255, 255, 255);
+        _workBrush.Color = s_inactiveDotColor;
         for (var i = 0; i < _brickRects.Count; i++)
         {
             var rect = _brickRects[i];
@@ -588,7 +599,7 @@ public sealed class VerticalProgressBar : ProgressBar
             }
             else
             {
-                _workBrush.Color = Color.FromArgb(30, 255, 255, 255);
+                _workBrush.Color = s_inactiveBrickColor;
                 g.FillRectangle(_workBrush, brickRect);
             }
         }
@@ -628,7 +639,7 @@ public sealed class VerticalProgressBar : ProgressBar
             }
             else
             {
-                _workBrush.Color = Color.FromArgb(30, 255, 255, 255);
+                _workBrush.Color = s_inactiveBrickColor;
                 g.FillRectangle(_workBrush, brickRect);
             }
         }
@@ -637,7 +648,7 @@ public sealed class VerticalProgressBar : ProgressBar
     // ========================= Mode Draw: Wave =========================
     private void DrawMode_Wave(Graphics g, int innerX, int innerW, int topInner, int bottomInner, int innerH, float fillPercent)
     {
-        _workBrush.Color = Color.FromArgb(18, 255, 255, 255);
+        _workBrush.Color = s_waveBackgroundColor;
         g.FillRectangle(_workBrush, new Rectangle(innerX, topInner, innerW, innerH));
 
         var filledH = (int)Math.Round(innerH * fillPercent);
@@ -730,7 +741,7 @@ public sealed class VerticalProgressBar : ProgressBar
             }
             else
             {
-                _workBrush.Color = Color.FromArgb(22, 255, 255, 255);
+                _workBrush.Color = s_inactivePulseColor;
                 g.FillRectangle(_workBrush, brickRect);
             }
         }
@@ -776,7 +787,7 @@ public sealed class VerticalProgressBar : ProgressBar
             }
             else
             {
-                _workBrush.Color = Color.FromArgb(16, 255, 255, 255);
+                _workBrush.Color = s_inactiveSpectrumColor;
                 g.FillRectangle(_workBrush, brickRect);
             }
         }

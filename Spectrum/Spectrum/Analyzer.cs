@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using Timer = System.Timers.Timer;
+using ElapsedEventArgs = System.Timers.ElapsedEventArgs;
 
 using Un4seen.Bass;
 using Un4seen.BassWasapi;
@@ -47,22 +49,34 @@ public sealed class Analyzer : IDisposable
     private const float SILENCE_FADE_MULT = 0.80f; // per tick
     private const float SILENCE_SNAP_TO_ZERO = 0.50f;
 
-    private readonly System.Windows.Forms.Timer _timer;
+    private readonly Timer _timer; // System.Timers.Timer fires on thread-pool, not blocked by UI message pump
     private readonly float[] _fft;
     private int[] _bandEdges; // rebuilt after WASAPI init / re-init
     private readonly float[] _smoothedSpectrum;
     private readonly byte[] _spectrumData;
 
+    // Pre-allocated fire buffer — avoids new byte[LINES] + new OnChangeEventArgs on every tick
+    private readonly byte[] _fireData;
+    private readonly OnChangeEventArgs _fireEventArgs;
+
     private readonly WASAPIPROC _process;
     private static readonly object _sender = new();
+
+    // SynchronizationContext captured on construction (UI thread) for marshalling device recovery
+    private readonly SynchronizationContext _syncContext;
+
+    // Windows audio endpoint notification — detects default device changes (speaker ↔ headset etc.)
+    private NAudio.CoreAudioApi.MMDeviceEnumerator _mmEnumerator;
+    private DeviceNotificationClient _deviceNotificationClient;
 
     private int _lastLevel;
     private int _hangCounter;
     private int _consecutiveZeroLevels;
 
     private bool _initialized;
-    private bool _disposed;
+    private volatile bool _disposed;
     private bool _silenceMode;
+    private volatile bool _recovering; // set while device recovery is pending on UI thread
 
     private int _sampleRate = 48000; // updated from WASAPI info after init
 
@@ -72,27 +86,69 @@ public sealed class Analyzer : IDisposable
     {
         BassNet.Registration("buddyknox@usa.org", "2X11841782815");
 
-        _fft = new float[FFT_SIZE];            // 8192 floats (half spectrum)
+        _syncContext = SynchronizationContext.Current;
+
+        _fft = new float[FFT_SIZE];
         _spectrumData = new byte[LINES];
         _smoothedSpectrum = new float[LINES];
+
+        _fireData = new byte[LINES];
+        _fireEventArgs = new OnChangeEventArgs(_fireData);
 
         // Temporary placeholder until we know actual sample rate from WASAPI
         _bandEdges = BuildBandsUpper_LogHz(LINES, FFT_SIZE, _sampleRate, MIN_HZ, MAX_HZ);
 
         _process = Process;
 
-        _timer = new System.Windows.Forms.Timer
-        {
-            Interval = TIMER_INTERVAL_MS,
-            Enabled = false
-        };
-        _timer.Tick += TimerTick;
+        // AutoReset=false: each tick re-arms itself, preventing overlapping ticks on the thread pool
+        _timer = new Timer { Interval = TIMER_INTERVAL_MS, AutoReset = false };
+        _timer.Elapsed += TimerTick;
 
         _ = Bass.BASS_SetConfig(BASSConfig.BASS_CONFIG_UPDATETHREADS, 0);
         _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
 
         _ = DeviceList();
         Enable(true);
+
+        // Register for Windows audio endpoint notifications so we detect speaker ↔ headset switches
+        // at runtime without requiring an app restart.
+        try
+        {
+            _mmEnumerator = new NAudio.CoreAudioApi.MMDeviceEnumerator();
+            _deviceNotificationClient = new DeviceNotificationClient(OnAudioDeviceChanged);
+            _mmEnumerator.RegisterEndpointNotificationCallback(_deviceNotificationClient);
+        }
+        catch
+        {
+            // Non-fatal: hot-device-switching detection unavailable, core capture still works
+        }
+    }
+
+    // Fired by Windows (on a COM thread) when the user changes the default playback device.
+    private void OnAudioDeviceChanged()
+    {
+        if (_disposed || _recovering) return;
+        _recovering = true;
+
+        var ctx = _syncContext;
+        if (ctx != null)
+        {
+            ctx.Post(_ =>
+            {
+                if (_disposed) { _recovering = false; return; }
+                _timer.Stop();
+                Free();
+                _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
+                _initialized = false;
+                _ = DeviceList(); // re-scan: picks the loopback for the new default device
+                _recovering = false;
+                Enable(true);
+            }, null);
+        }
+        else
+        {
+            _recovering = false;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -224,12 +280,11 @@ public sealed class Analyzer : IDisposable
             }
 
             _ = BassWasapi.BASS_WASAPI_Start();
-            Thread.Sleep(250);
-            _timer.Enabled = true;
+            _timer.Start(); // no sleep — WASAPI buffers audio; UI no longer blocked at startup
         }
         else
         {
-            _timer.Enabled = false;
+            _timer.Stop();
             _ = BassWasapi.BASS_WASAPI_Stop(true);
             _initialized = false;
             Free();
@@ -250,42 +305,51 @@ public sealed class Analyzer : IDisposable
         _ = Bass.BASS_Free();
     }
 
-    private void TimerTick(object sender, EventArgs e)
+    private void TimerTick(object sender, ElapsedEventArgs e)
     {
-        if (_disposed)
+        if (_disposed || _recovering) return;
+
+        try
         {
-            return;
-        }
+            // No Array.Clear: BASS fills the buffer
+            var ret = BassWasapi.BASS_WASAPI_GetData(_fft, (int)BASSData.BASS_DATA_FFT16384);
 
-        // No Array.Clear: BASS fills the buffer
-        var ret = BassWasapi.BASS_WASAPI_GetData(_fft, (int)BASSData.BASS_DATA_FFT16384);
-
-        if (ret < 0)
-        {
-            FadeSilenceAndFire();
-            return;
-        }
-
-        var level = BassWasapi.BASS_WASAPI_GetLevel();
-
-        if (level == 0)
-        {
-            _consecutiveZeroLevels++;
-            if (_consecutiveZeroLevels >= SILENCE_FRAMES_REQUIRED)
+            if (ret < 0)
             {
                 FadeSilenceAndFire();
-                HandleDeviceHang(level);
                 return;
             }
-        }
-        else
-        {
-            _consecutiveZeroLevels = 0;
-            _silenceMode = false;
-        }
 
-        ProcessFFTDataAndFire();
-        HandleDeviceHang(level);
+            var level = BassWasapi.BASS_WASAPI_GetLevel();
+
+            if (level == 0)
+            {
+                _consecutiveZeroLevels++;
+                if (_consecutiveZeroLevels >= SILENCE_FRAMES_REQUIRED)
+                {
+                    FadeSilenceAndFire();
+                    HandleDeviceHang(level);
+                    return;
+                }
+            }
+            else
+            {
+                _consecutiveZeroLevels = 0;
+                _silenceMode = false;
+            }
+
+            ProcessFFTDataAndFire();
+            HandleDeviceHang(level);
+        }
+        finally
+        {
+            // Re-arm the one-shot timer so the next tick fires after this one completes
+            if (!_disposed && !_recovering)
+            {
+                try { _timer.Start(); }
+                catch (ObjectDisposedException) { }
+            }
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -333,9 +397,9 @@ public sealed class Analyzer : IDisposable
         for (var x = 0; x < LINES; x++)
         {
             var b1 = _bandEdges[x];
-            if (b1 > FFT_SIZE)
+            if (b1 >= FFT_SIZE) // >= not >: max inner-loop index is fftOffset+(b1-1)=b1, must be < FFT_SIZE
             {
-                b1 = FFT_SIZE;
+                b1 = FFT_SIZE - 1;
             }
 
             if (b1 <= b0)
@@ -380,10 +444,8 @@ public sealed class Analyzer : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void FireOnChange()
     {
-        var data = new byte[LINES];
-        Buffer.BlockCopy(_spectrumData, 0, data, 0, LINES);
-
-        OnChange?.Invoke(_sender, new OnChangeEventArgs(data));
+        Buffer.BlockCopy(_spectrumData, 0, _fireData, 0, LINES);
+        OnChange?.Invoke(_sender, _fireEventArgs);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -404,13 +466,31 @@ public sealed class Analyzer : IDisposable
         {
             _hangCounter = 0;
             _consecutiveZeroLevels = 0;
+            _recovering = true; // stops the timer from re-arming in the finally block
 
-            Free();
-            _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
-            _initialized = false;
-
-            // re-init will rebuild _bandEdges with actual device sample rate again
-            Enable(true);
+            // BASS init/free must run on the UI thread; marshal via SynchronizationContext
+            var ctx = _syncContext;
+            if (ctx != null)
+            {
+                ctx.Post(_ =>
+                {
+                    if (_disposed) { _recovering = false; return; }
+                    Free();
+                    _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
+                    _initialized = false;
+                    _recovering = false;
+                    Enable(true); // re-init will rebuild _bandEdges with actual device sample rate
+                }, null);
+            }
+            else
+            {
+                // Fallback: no sync context (shouldn't happen in normal WinForms usage)
+                Free();
+                _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
+                _initialized = false;
+                _recovering = false;
+                Enable(true);
+            }
         }
     }
 
@@ -423,12 +503,56 @@ public sealed class Analyzer : IDisposable
 
         _disposed = true;
 
-        _timer.Enabled = false;
-        _timer.Tick -= TimerTick;
+        // Unregister audio endpoint notifications before stopping anything else
+        if (_mmEnumerator != null)
+        {
+            try
+            {
+                if (_deviceNotificationClient != null)
+                    _mmEnumerator.UnregisterEndpointNotificationCallback(_deviceNotificationClient);
+            }
+            catch { }
+            _mmEnumerator = null;
+        }
+
+        _timer.Stop();
+        _timer.Elapsed -= TimerTick;
         _timer.Dispose();
 
-        Free();
+        // Call BASS cleanup directly — Free() checks _disposed and would return early here
+        _ = BassWasapi.BASS_WASAPI_Free();
+        _ = Bass.BASS_Free();
 
         OnChange = null;
+    }
+
+    // ========================= Audio endpoint notification client =========================
+
+    // Listens for the Windows default playback device changing (speaker ↔ headset etc.)
+    // and triggers an Analyzer re-init on the UI thread so capture follows the new device.
+    private sealed class DeviceNotificationClient : NAudio.CoreAudioApi.Interfaces.IMMNotificationClient
+    {
+        private readonly Action _onDefaultChanged;
+
+        public DeviceNotificationClient(Action onDefaultChanged)
+            => _onDefaultChanged = onDefaultChanged;
+
+        public void OnDefaultDeviceChanged(
+            NAudio.CoreAudioApi.DataFlow flow,
+            NAudio.CoreAudioApi.Role role,
+            string defaultDeviceId)
+        {
+            // Only react to the primary (Multimedia) render device — the one used for music
+            if (flow == NAudio.CoreAudioApi.DataFlow.Render &&
+                role == NAudio.CoreAudioApi.Role.Multimedia)
+            {
+                _onDefaultChanged();
+            }
+        }
+
+        public void OnDeviceAdded(string pwstrDeviceId) { }
+        public void OnDeviceRemoved(string deviceId) { }
+        public void OnDeviceStateChanged(string deviceId, NAudio.CoreAudioApi.DeviceState newState) { }
+        public void OnPropertyValueChanged(string pwstrDeviceId, NAudio.CoreAudioApi.PropertyKey key) { }
     }
 }
