@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using Timer = System.Timers.Timer;
-using ElapsedEventArgs = System.Timers.ElapsedEventArgs;
-
 using Un4seen.Bass;
 using Un4seen.BassWasapi;
+using ElapsedEventArgs = System.Timers.ElapsedEventArgs;
+using Timer = System.Timers.Timer;
 
 namespace Spectrum;
 
@@ -58,7 +57,7 @@ public sealed class Analyzer : IDisposable
     private readonly SynchronizationContext _syncContext;
 
     private NAudio.CoreAudioApi.MMDeviceEnumerator _mmEnumerator;
-    private DeviceNotificationClient _deviceNotificationClient;
+    private readonly DeviceNotificationClient _deviceNotificationClient;
 
     private int _lastLevel;
     private int _hangCounter;
@@ -103,14 +102,18 @@ public sealed class Analyzer : IDisposable
         {
             _mmEnumerator = new NAudio.CoreAudioApi.MMDeviceEnumerator();
             _deviceNotificationClient = new DeviceNotificationClient(OnAudioDeviceChanged);
-            _mmEnumerator.RegisterEndpointNotificationCallback(_deviceNotificationClient);
+            _ = _mmEnumerator.RegisterEndpointNotificationCallback(_deviceNotificationClient);
         }
         catch { }
     }
 
     private void OnAudioDeviceChanged()
     {
-        if (_disposed || _recovering) return;
+        if (_disposed || _recovering)
+        {
+            return;
+        }
+
         _recovering = true;
 
         var ctx = _syncContext;
@@ -118,7 +121,8 @@ public sealed class Analyzer : IDisposable
         {
             ctx.Post(_ =>
             {
-                if (_disposed) { _recovering = false; return; }
+                if (_disposed)
+                { _recovering = false; return; }
                 _timer.Stop();
                 Free();
                 _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
@@ -156,9 +160,20 @@ public sealed class Analyzer : IDisposable
 
             var bin = (int)Math.Round(hz * FFT_LEN / sampleRate);
 
-            if (bin < 1) bin = 1;
-            if (bin > maxBin) bin = maxBin;
-            if (bin <= prev) bin = Math.Min(prev + 1, maxBin);
+            if (bin < 1)
+            {
+                bin = 1;
+            }
+
+            if (bin > maxBin)
+            {
+                bin = maxBin;
+            }
+
+            if (bin <= prev)
+            {
+                bin = Math.Min(prev + 1, maxBin);
+            }
 
             upper[x] = bin;
             prev = bin;
@@ -185,7 +200,24 @@ public sealed class Analyzer : IDisposable
             }
         }
 
-        var device =
+        // Prefer the Windows default render endpoint so we always capture from the active output.
+        Device device = null;
+        try
+        {
+            var mmEnum = new NAudio.CoreAudioApi.MMDeviceEnumerator();
+            var defaultDev = mmEnum.GetDefaultAudioEndpoint(
+                NAudio.CoreAudioApi.DataFlow.Render,
+                NAudio.CoreAudioApi.Role.Multimedia);
+            var defaultName = defaultDev.FriendlyName;
+            device = devices.FirstOrDefault(d =>
+                string.Equals(d.DeviceName, defaultName, StringComparison.OrdinalIgnoreCase)
+                || d.DeviceName.IndexOf(defaultName, StringComparison.OrdinalIgnoreCase) >= 0
+                || defaultName.IndexOf(d.DeviceName, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+        catch { }
+
+        // Fall back to name-based heuristics if default endpoint lookup failed.
+        device ??=
             devices.FirstOrDefault(d => d.DeviceName.IndexOf("Headphones", StringComparison.OrdinalIgnoreCase) >= 0)
             ?? devices.FirstOrDefault(d => d.DeviceName.IndexOf("Headset", StringComparison.OrdinalIgnoreCase) >= 0)
             ?? devices.FirstOrDefault(d => d.DeviceName.IndexOf("Speakers", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -275,7 +307,10 @@ public sealed class Analyzer : IDisposable
 
     private void TimerTick(object sender, ElapsedEventArgs e)
     {
-        if (_disposed || _recovering) return;
+        if (_disposed || _recovering)
+        {
+            return;
+        }
 
         try
         {
@@ -312,7 +347,8 @@ public sealed class Analyzer : IDisposable
         {
             if (!_disposed && !_recovering)
             {
-                try { _timer.Start(); }
+                try
+                { _timer.Start(); }
                 catch (ObjectDisposedException) { }
             }
         }
@@ -389,8 +425,8 @@ public sealed class Analyzer : IDisposable
 
             var clamped = rawValue > 255 ? 255 : (rawValue < 0 ? 0 : rawValue);
 
-            _smoothedSpectrum[x] = _smoothedSpectrum[x] * SMOOTHING_FACTOR
-                                 + clamped * (1.0f - SMOOTHING_FACTOR);
+            _smoothedSpectrum[x] = (_smoothedSpectrum[x] * SMOOTHING_FACTOR)
+                                 + (clamped * (1.0f - SMOOTHING_FACTOR));
 
             var finalValue = (byte)_smoothedSpectrum[x];
             _spectrumData[x] = finalValue;
@@ -439,7 +475,8 @@ public sealed class Analyzer : IDisposable
             {
                 ctx.Post(_ =>
                 {
-                    if (_disposed) { _recovering = false; return; }
+                    if (_disposed)
+                    { _recovering = false; return; }
                     Free();
                     _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
                     _initialized = false;
@@ -472,7 +509,9 @@ public sealed class Analyzer : IDisposable
             try
             {
                 if (_deviceNotificationClient != null)
-                    _mmEnumerator.UnregisterEndpointNotificationCallback(_deviceNotificationClient);
+                {
+                    _ = _mmEnumerator.UnregisterEndpointNotificationCallback(_deviceNotificationClient);
+                }
             }
             catch { }
             _mmEnumerator = null;
