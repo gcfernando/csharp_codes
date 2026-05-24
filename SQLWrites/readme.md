@@ -1,157 +1,125 @@
-# ⚡ Customer Activity Event Upserts — Normal vs TVP vs Bulk Staging (with SQL Retries)
+# SQL Writes — Three Upsert Strategies
 
-When your system is **ingesting a flood of customer activity events**, the database write strategy you choose can mean the difference between:
+A .NET 10 solution demonstrating three production-ready upsert strategies for a `CustomerActivityEvent` record against SQL Server. All strategies are wrapped in a shared transient-fault retry policy.
 
-✅ smooth, scalable throughput  
-vs  
-🔥 timeouts, deadlocks, and “why is prod on fire again?”
+## The Data Model
 
-This project gives you **three production-ready upsert paths** for `CustomerActivityEvent` — each designed for a different volume + latency profile — all wrapped in a **SQL transient-fault retry policy**.
+`CustomerActivityEvent` is a sealed record with:
 
-> **Goal:** reliably upsert customer activity events into SQL Server while balancing **throughput**, **locking**, **row-version concurrency**, and **operational safety**. :contentReference[oaicite:0]{index=0}
+| Field | Type | Description |
+|---|---|---|
+| `EventId` | `Guid` | Immutable event identity |
+| `CustomerId` | `int` | Who performed the activity |
+| `ActivityType` | `string` | What happened |
+| `TimeStampUtc` | `DateTime` | When it happened |
+| `DetailsJson` | `string` | JSON payload / metadata |
+| `RowVersion` | `byte[]` | Current row version (from DB) |
+| `ExpectedRowVersion` | `byte[]` | Optimistic concurrency check value |
 
----
+Upsert logic applies updates only when the incoming `TimeStampUtc` is newer than the stored value, providing built-in out-of-order protection.
 
-## 🧠 The Data Contract
+## Upsert Strategies
 
-At the core is a compact event record:
+### 1. Normal — `UseNormal`
 
-- `EventId` (Guid) — immutable identity
-- `CustomerId` (int) — who did it
-- `ActivityType` (string) — what happened
-- `TimeStampUtc` (DateTime) — when it happened
-- `DetailsJson` (string) — payload / metadata
-- `RowVersion` + `ExpectedRowVersion` (byte[]) — optimistic concurrency hooks
+**Best for:** low volume, simple correctness requirements.
 
-This design supports **idempotency**, **ordering rules**, and **concurrency-safe updates**. :contentReference[oaicite:1]{index=1}
+- Opens a transaction per event
+- `UPDATE ... WHERE event_id = @id AND time_stamp_utc < @new_ts` (with optional `row_version` check)
+- `INSERT ... WHERE NOT EXISTS (SELECT 1 ... WITH (UPDLOCK, HOLDLOCK))`
+- Commits; rolls back on failure
+- Supports `UpsertAsync` (single event) and `UpsertManyAsync` (loop over a list)
 
----
+### 2. TVP — `UseTvp`
 
-## 🛡️ Resilience First: SQL Retry Policy
+**Best for:** medium-volume batch ingestion via stored procedures.
 
-Transient SQL errors happen. Networks blip. Azure throttles. Deadlocks occur.
+- Builds a `DataTable` from a list of events
+- Passes it as a Table-Valued Parameter to `dbo.UpsertCustomerActivityEventsType`
+- The stored procedure deduplicates, updates stale rows, and inserts new ones in a single transaction
 
-`SqlRetryPolicy` wraps your operations with:
+### 3. Bulk Staging — `UseBulk`
 
-- **exponential backoff**
-- **jitter**
-- **known transient SQL error detection**
-- optional logging hook
+**Best for:** high-volume ingestion pipelines (tested with 200 000 events).
 
-In short: *don’t fail fast — fail smart.* :contentReference[oaicite:2]{index=2}
+- Generates a `batchId` (GUID)
+- Streams events into `dbo.CustomerActivityEvents_Staging` via `SqlBulkCopy` (batch size: 50 000, table lock, streaming enabled)
+- Calls `dbo.ReconcileCustomerActivityEventsBatch` which deduplicates, updates, and inserts — returning `RowsUpdated`, `RowsInserted`, `RowsConflicted` as OUTPUT parameters
+- Cleans up the staging table after reconciliation
 
----
+## Strategy Comparison
 
-# 🚀 Three Upsert Strategies (Pick Your Weapon)
+| Strategy | Best For | Notes |
+|---|---|---|
+| Normal | Low volume / simplicity | Easiest to debug; 1 round trip per event |
+| TVP | Medium-volume batches | Clean SQL boundary via stored proc |
+| Bulk Staging | High-volume pipelines | Fastest; needs staging table and reconcile proc |
 
-## 1) 🧱 “Normal” Upsert — Simple, Safe, Slower
+## Retry Policy (`Common/SqlRetryPolicy`)
 
-**File:** `CustomerActivityEventWriter`  
-**Best for:** low volume, tight correctness, easiest debugging
+Wraps all DB operations with exponential backoff and jitter. Retries on these transient SQL error codes: 1205 (deadlock), -2 (timeout), 4060, 40197, 40501, 40613, 49918, 49919, 49920, 10053, 10054, 10060, `TimeoutException`, and `IOException`.
 
-How it works:
-- opens a transaction
-- `UPDATE ... WHERE event_id = @event_id AND time_stamp_utc < @time_stamp_utc`
-- optional `row_version = @expected_row_version` check
-- then `INSERT ... WHERE NOT EXISTS (...)` with `UPDLOCK, HOLDLOCK`
+Default: **5 retries**, base delay **100 ms**, max delay **5 000 ms**.
 
-✅ Easy to reason about  
-✅ Works great for small batches  
-⚠️ One round trip per event (in `UpsertManyAsync`) → can get expensive fast :contentReference[oaicite:3]{index=3}
+## Database Setup
 
----
+Run `Query.sql` against your SQL Server database to create:
 
-## 2) 📦 TVP Batch Upsert — Fast Batching, Less Chattiness
+- `dbo.CustomerActivityEvents` — main table with `row_version` column and unique index on `event_id`
+- `dbo.CustomerActivityEventType` — TVP type definition
+- `dbo.UpsertCustomerActivityEventsType` — stored procedure for the TVP strategy
+- `dbo.CustomerActivityEvents_Staging` — staging table for the bulk strategy
+- `dbo.ReconcileCustomerActivityEventsBatch` — stored procedure for bulk reconciliation
 
-**File:** `CustomerActivityEventTvpWriter`  
-**Best for:** medium volume, batch ingestion, stored-proc-centric systems
+## Requirements
 
-How it works:
-- builds a `DataTable`
-- sends it as a **Table-Valued Parameter** (`dbo.CustomerActivityEventType`)
-- calls stored procedure `dbo.UpsertCustomerActivityEventsType`
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- SQL Server (local or remote)
 
-✅ Fewer network round trips  
-✅ Clean boundary: app sends data, SQL owns the merge logic  
-⚠️ You still pay for DataTable creation + memory for large batches :contentReference[oaicite:4]{index=4}
+## Configuration
 
----
+Edit the connection string in each project's `Program.cs`:
 
-## 3) 🏗️ Bulk Copy to Staging + Reconcile — Maximum Throughput
+```csharp
+var connectionString = "Data Source=<server>;Initial Catalog=<db>;Integrated Security=True;Trust Server Certificate=True";
+```
 
-**File:** `CustomerActivityEventBulkStagingWriter`  
-**Best for:** large volume, ingestion pipelines, “we process *a lot*”
+## NuGet Packages
 
-How it works:
-1. generate a `batchId`
-2. `SqlBulkCopy` into `dbo.CustomerActivityEvents_Staging`
-   - table lock
-   - internal transaction
-   - streaming enabled
-   - huge batch size (`50,000`)
-3. call stored procedure `dbo.ReconcileCustomerActivityEventsBatch`
-   - outputs: `RowsUpdated`, `RowsInserted`, `RowsConflicted`
+| Package | Version |
+|---|---|
+| `Microsoft.Data.SqlClient` | 6.1.3 |
 
-✅ Designed for *serious* throughput  
-✅ Metrics built-in: you get updated/inserted/conflicted counts  
-✅ Ideal for event ingestion services  
-⚠️ Requires staging table + reconcile proc (schema discipline matters) :contentReference[oaicite:5]{index=5}
+## Build and Run
 
----
+```bash
+# Normal strategy demo
+cd SQLWrites/UseNormal && dotnet run
 
-# 🎯 Which One Should You Use?
+# TVP strategy demo
+cd SQLWrites/UseTvp && dotnet run
 
-| Strategy | Best For | Pros | Watch Outs |
-|---|---|---|---|
-| Normal | low volume / simplicity | easiest to debug | lots of round trips |
-| TVP | medium volume batching | clean SQL boundary | DataTable overhead |
-| Bulk + Staging | high volume ingestion | fastest + metrics | needs staging + reconcile |
+# Bulk Staging strategy demo (streams 200 000 events)
+cd SQLWrites/UseBulk && dotnet run
+```
 
----
+## Project Structure
 
-## ✨ Extra Highlights
-
-### ✅ Ordering Rule Built In
-Updates only apply when incoming `time_stamp_utc` is newer than what’s stored.  
-That’s a subtle but powerful guardrail against out-of-order event arrivals. :contentReference[oaicite:6]{index=6}
-
-### ✅ Optimistic Concurrency Ready
-`ExpectedRowVersion` lets you enforce “update only if I’m not stale” behavior (when supplied). :contentReference[oaicite:7]{index=7}
-
-### ✅ Operational Confidence
-Every path is wrapped with `SqlRetryPolicy` so transient faults don’t become incidents. :contentReference[oaicite:8]{index=8}
-
----
-
-# 🧪 Suggested Usage Patterns
-
-- **API endpoint** receiving single events → *Normal*
-- **worker** consuming batches from a queue → *TVP*
-- **pipeline** draining high-throughput stream (Kafka/EventHub/etc.) → *Bulk Staging*
-
----
-
-## 🧩 What You’ll Need in SQL (Conceptually)
-
-To fully run the TVP and Bulk paths, your DB needs:
-
-- `dbo.CustomerActivityEventType` (TVP type)
-- `dbo.UpsertCustomerActivityEventsType` (stored proc)
-- `dbo.CustomerActivityEvents_Staging` (staging table)
-- `dbo.ReconcileCustomerActivityEventsBatch` (stored proc)
-
-(Those objects aren’t shown in the snippet, but the code is wired for them.) :contentReference[oaicite:9]{index=9}
-
----
-
-## ✅ Bottom Line
-
-This is a **battle-tested write toolkit** for customer activity event upserts:
-
-- correctness & concurrency ✅  
-- retries & resilience ✅  
-- scalable paths from small → massive ✅  
-
-Pick the strategy that matches your throughput reality — and upgrade without rewriting your domain model.
-
----
+```
+SQLWrites/
+├── Common/
+│   ├── Model.cs               # CustomerActivityEvent record
+│   └── SqlRetryPolicy.cs      # Transient-fault retry logic
+├── UseNormal/
+│   ├── CustomerActivityEventWriter.cs            # Normal upsert
+│   └── Program.cs
+├── UseTvp/
+│   ├── CustomerActivityEventTvpWriter.cs         # TVP batch upsert
+│   └── Program.cs
+├── UseBulk/
+│   ├── CustomerActivityEventBulkStagingWriter.cs # Bulk copy + reconcile
+│   ├── CustomerActivityEventDataReader.cs        # Custom IDataReader for SqlBulkCopy
+│   └── Program.cs
+├── Query.sql                  # SQL DDL: tables, types, stored procedures
+└── SQLWrites.sln
+```
