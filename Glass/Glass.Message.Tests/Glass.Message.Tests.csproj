@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit"                         Version="2.9.0" />
+    <PackageReference Include="xunit.runner.visualstudio"    Version="2.8.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk"       Version="17.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Glass.Message\Glass.Message.csproj" />
+  </ItemGroup>
+
+</Project>

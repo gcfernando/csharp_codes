@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Glass.Demo</AssemblyName>
+    <RootNamespace>Glass.Demo</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Glass.Message\Glass.Message.csproj" />
+  </ItemGroup>
+
+  <!-- Sign the EXE and the copied Glass.Message.dll after every build -->
+  <Target Name="SignOutput" AfterTargets="Build">
+    <PropertyGroup>
+      <_SignScript>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\tools\Sign-Output.ps1'))</_SignScript>
+      <_ThumbprintFile>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\tools\cert-thumbprint.txt'))</_ThumbprintFile>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SignScript)&quot; -TargetPath &quot;$(TargetPath)&quot; -ThumbprintFile &quot;$(_ThumbprintFile)&quot;"
+          ContinueOnError="true" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SignScript)&quot; -TargetPath &quot;$(OutDir)Glass.Message.dll&quot; -ThumbprintFile &quot;$(_ThumbprintFile)&quot;"
+          ContinueOnError="true" />
+  </Target>
+
+</Project>

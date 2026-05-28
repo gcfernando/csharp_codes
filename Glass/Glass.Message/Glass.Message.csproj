@@ -1,60 +1,57 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{2A291AEE-854D-4E3E-81E7-721B4D829213}</ProjectGuid>
+    <TargetFrameworks>net481;net8.0-windows</TargetFrameworks>
+    <UseWindowsForms>true</UseWindowsForms>
     <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <!-- Best setup for your public API:
-         DLL: Glass.Message.dll
-         Namespace: Glass
-         Usage: GlassMessage.Show(...) -->
-    <RootNamespace>Glass</RootNamespace>
     <AssemblyName>Glass.Message</AssemblyName>
-    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <Deterministic>true</Deterministic>
+    <RootNamespace>Glass</RootNamespace>
     <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Deterministic>true</Deterministic>
+    <Platforms>AnyCPU</Platforms>
+
+    <!-- Suppress auto-generated AssemblyInfo so our Properties\AssemblyInfo.cs stays authoritative -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+    <!-- XML docs for IntelliSense -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CA1416: suppress Windows-platform warnings — this library is Windows-only by design -->
+    <NoWarn>$(NoWarn);1591;CA1416</NoWarn>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Glass.Message</PackageId>
+    <Version>2.0.0</Version>
+    <Authors>Gehan Fernando</Authors>
+    <Company>Gehan Fernando</Company>
+    <Description>Next-level modern replacement for MessageBox on Windows — Mica/Acrylic backdrop, auto dark/light theme, animations, toast notifications, async API, inline input, countdown, expandable detail, progress bar, RTL, and more. Drop-in compatible: GlassMessage.Show(...) compiles as-is.</Description>
+    <PackageTags>messagebox dialog winforms windows11 windows10 fluent glass mica acrylic toast notification dark-mode dpi-aware</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Copyright>Copyright © 2026 Gehan Fernando</Copyright>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <ItemGroup>
+
+  <!-- Auto-sign every output DLL with the dev Authenticode cert (run tools\Setup-DevCert.ps1 once first) -->
+  <Target Name="SignOutput" AfterTargets="Build">
+    <PropertyGroup>
+      <_SignScript>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\tools\Sign-Output.ps1'))</_SignScript>
+      <_ThumbprintFile>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\tools\cert-thumbprint.txt'))</_ThumbprintFile>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SignScript)&quot; -TargetPath &quot;$(TargetPath)&quot; -ThumbprintFile &quot;$(_ThumbprintFile)&quot;"
+          ContinueOnError="true" />
+  </Target>
+
+  <!-- .NET Framework 4.8.1 — explicit references (WinForms assemblies not auto-resolved on this TFM) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net481'">
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="GlassBuilder.cs" />
-    <Compile Include="GlassButton.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Include="GlassDialog.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="GlassMessage.cs" />
-    <Compile Include="GlassTheme.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
+
+  <!-- .NET 8 Windows — Registry package (built into .NET Framework, needs package on .NET 8) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
 </Project>
