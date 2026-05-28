@@ -6,12 +6,17 @@ using System.Windows.Forms;
 namespace Glass;
 
 // ─────────────────────────────────────────────────────────────────────────
-// GlassButton — premium custom-painted button with HC-mode and accessibility.
+// GlassButton — smooth-transition, cached-path premium button.
 // ─────────────────────────────────────────────────────────────────────────
 internal sealed class GlassButton : Button
 {
     private readonly GlassTheme _theme;
-    private bool _hovered, _focused, _pressed;
+    private bool  _hovered, _focused, _pressed;
+    private float _hoverT;       // 0 = resting, 1 = fully hovered/focused
+    private bool  _targetHover;
+    private System.Windows.Forms.Timer _transTimer;
+    private GraphicsPath _path;
+    private Size         _pathSize;
 
     public GlassButton(GlassTheme theme)
     {
@@ -29,75 +34,113 @@ internal sealed class GlassButton : Button
             ControlStyles.UserPaint, true);
     }
 
-    protected override void OnMouseEnter(EventArgs e) { _hovered = true;  Invalidate(); base.OnMouseEnter(e); }
-    protected override void OnMouseLeave(EventArgs e) { _hovered = false; Invalidate(); base.OnMouseLeave(e); }
-    protected override void OnMouseDown(MouseEventArgs e)  { _pressed = true;  Invalidate(); base.OnMouseDown(e); }
-    protected override void OnMouseUp(MouseEventArgs e)    { _pressed = false; Invalidate(); base.OnMouseUp(e); }
-    protected override void OnEnter(EventArgs e) { _focused = true;  Invalidate(); base.OnEnter(e); }
-    protected override void OnLeave(EventArgs e) { _focused = false; Invalidate(); base.OnLeave(e); }
+    // ── State transitions ─────────────────────────────────────────────────
+
+    protected override void OnMouseEnter(EventArgs e) { _hovered = true;  StartTransition(true);         base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _hovered = false; StartTransition(_focused);     base.OnMouseLeave(e); }
+    protected override void OnMouseDown(MouseEventArgs e) { _pressed = true;  Invalidate(); base.OnMouseDown(e); }
+    protected override void OnMouseUp(MouseEventArgs e)   { _pressed = false; Invalidate(); base.OnMouseUp(e); }
+    protected override void OnEnter(EventArgs e) { _focused = true;  StartTransition(true);      base.OnEnter(e); }
+    protected override void OnLeave(EventArgs e) { _focused = false; StartTransition(_hovered);  base.OnLeave(e); }
+
+    protected override void OnResize(EventArgs e)
+    {
+        _path?.Dispose();
+        _path = null;
+        base.OnResize(e);
+    }
+
+    private void StartTransition(bool toHover)
+    {
+        _targetHover = toHover;
+        if (_transTimer == null)
+        {
+            _transTimer = new System.Windows.Forms.Timer { Interval = 16 };
+            _transTimer.Tick += (s, ev) =>
+            {
+                _hoverT = _targetHover
+                    ? Math.Min(1f, _hoverT + 0.12f)
+                    : Math.Max(0f, _hoverT - 0.12f);
+                Invalidate();
+                if (_hoverT <= 0f || _hoverT >= 1f)
+                    _transTimer.Stop();
+            };
+        }
+        _transTimer.Start();
+    }
+
+    // ── Cached rounded path ───────────────────────────────────────────────
+
+    private GraphicsPath CachedPath
+    {
+        get
+        {
+            if (_path == null || _pathSize != Size)
+            {
+                _path?.Dispose();
+                _pathSize = Size;
+                _path = GlassDialog.RoundRect(new Rectangle(0, 0, Width - 1, Height - 1), _theme.ButtonCornerRadius);
+            }
+            return _path;
+        }
+    }
+
+    // ── Paint ─────────────────────────────────────────────────────────────
 
     protected override void OnPaint(PaintEventArgs pevent)
     {
         var g = pevent.Graphics;
         GlassDialog.SetQuality(g);
 
-        // High-contrast: defer entirely to system rendering
-        if (SystemInformation.HighContrast)
-        {
-            PaintHighContrast(g);
-            return;
-        }
+        if (SystemInformation.HighContrast) { PaintHighContrast(g); return; }
 
-        var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+        var path = CachedPath;
         var r    = _theme.ButtonCornerRadius;
+        var t    = _pressed ? 0f : _hoverT;
 
-        using var path = GlassDialog.RoundRect(rect, r);
-
-        // ── Fill gradient ─────────────────────────────────────────────────
+        // ── Fill gradient (smooth interpolation) ──────────────────────────
         Color fillTop, fillBot;
         if (_pressed)
         {
             fillTop = Darken(_theme.ButtonFillTop,    50);
             fillBot = Darken(_theme.ButtonFillBottom, 40);
         }
-        else if (_hovered || _focused)
-        {
-            fillTop = Lighten(_theme.ButtonFillTop,    40);
-            fillBot = Lighten(_theme.ButtonFillBottom, 30);
-        }
         else
         {
-            fillTop = _theme.ButtonFillTop;
-            fillBot = _theme.ButtonFillBottom;
+            fillTop = Blend(_theme.ButtonFillTop,    Lighten(_theme.ButtonFillTop,    40), t);
+            fillBot = Blend(_theme.ButtonFillBottom, Lighten(_theme.ButtonFillBottom, 30), t);
         }
 
-        using var fill = new LinearGradientBrush(
-            new Rectangle(0, 0, Width, Height),
-            fillTop, fillBot, LinearGradientMode.Vertical);
-        g.FillPath(fill, path);
+        using (var fill = new LinearGradientBrush(
+            new Rectangle(0, 0, Width, Height), fillTop, fillBot, LinearGradientMode.Vertical))
+            g.FillPath(fill, path);
 
-        // ── Gloss sheen ───────────────────────────────────────────────────
-        var glossH    = Math.Max(1, (Height - 2) / 2);
+        // ── Gloss shelf (top third, clipped to shape) ─────────────────────
+        var glossH    = Math.Max(1, Height / 3);
         var glossRect = new Rectangle(1, 1, Width - 2, glossH);
-        using var gp  = GlassDialog.RoundRect(glossRect, Math.Max(1, r - 1));
-        using var gl  = new LinearGradientBrush(glossRect,
-            Color.FromArgb(_hovered ? 20 : 12, 255, 255, 255),
+        using (var gp = GlassDialog.RoundRect(glossRect, Math.Max(1, r - 1)))
+        using (var gl = new LinearGradientBrush(glossRect,
+            Color.FromArgb((int)(15 + t * 30), 255, 255, 255),
             Color.FromArgb(0, 255, 255, 255),
-            LinearGradientMode.Vertical);
-        g.FillPath(gl, gp);
+            LinearGradientMode.Vertical))
+        {
+            g.SetClip(path);
+            g.FillPath(gl, gp);
+            g.ResetClip();
+        }
 
-        // ── Border ────────────────────────────────────────────────────────
-        var borderAlpha = _pressed ? 255 : _hovered || _focused ? 210 : 110;
-        using var pen = new Pen(Color.FromArgb(borderAlpha, _theme.BorderColor), 1f);
-        g.DrawPath(pen, path);
+        // ── Border: outer glow + crisp edge ───────────────────────────────
+        using (var glowPen = new Pen(Color.FromArgb((int)(30 + t * 40), _theme.BorderColor), 3f))
+            g.DrawPath(glowPen, path);
+        using (var edgePen = new Pen(Color.FromArgb(_pressed ? 200 : (int)(90 + t * 120), _theme.BorderColor), 1f))
+            g.DrawPath(edgePen, path);
 
         // ── Focus ring ────────────────────────────────────────────────────
         if (_focused && !_pressed)
         {
             var fr = new Rectangle(2, 2, Width - 5, Height - 5);
             using var fp  = GlassDialog.RoundRect(fr, Math.Max(1, r - 2));
-            using var fp2 = new Pen(Color.FromArgb(150, _theme.AccentColor), 1f)
-                            { DashStyle = DashStyle.Dot };
+            using var fp2 = new Pen(Color.FromArgb(150, _theme.AccentColor), 1f) { DashStyle = DashStyle.Dot };
             g.DrawPath(fp2, fp);
         }
 
@@ -106,7 +149,6 @@ internal sealed class GlassButton : Button
                     TextFormatFlags.VerticalCenter   |
                     TextFormatFlags.SingleLine;
         if (!ShowKeyboardCues) flags |= TextFormatFlags.HidePrefix;
-
         TextRenderer.DrawText(g, Text, Font, ClientRectangle,
             _pressed ? _theme.AccentColor : ForeColor,
             Color.Transparent, flags);
@@ -123,13 +165,19 @@ internal sealed class GlassButton : Button
                     TextFormatFlags.VerticalCenter   |
                     TextFormatFlags.SingleLine;
         if (!ShowKeyboardCues) flags |= TextFormatFlags.HidePrefix;
-
         TextRenderer.DrawText(g, Text, Font, rect,
             _pressed ? SystemColors.HighlightText : SystemColors.ControlText,
             Color.Transparent, flags);
     }
 
     // ── Color helpers ─────────────────────────────────────────────────────
+
+    private static Color Blend(Color a, Color b, float t)
+        => Color.FromArgb(
+            Math.Max(0, Math.Min(255, (int)(a.A + (b.A - a.A) * t))),
+            Math.Max(0, Math.Min(255, (int)(a.R + (b.R - a.R) * t))),
+            Math.Max(0, Math.Min(255, (int)(a.G + (b.G - a.G) * t))),
+            Math.Max(0, Math.Min(255, (int)(a.B + (b.B - a.B) * t))));
 
     private static Color Lighten(Color c, int amount)
         => Color.FromArgb(c.A,
@@ -142,4 +190,15 @@ internal sealed class GlassButton : Button
             Math.Max(0, c.R - amount),
             Math.Max(0, c.G - amount),
             Math.Max(0, c.B - amount));
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _transTimer?.Stop();
+            _transTimer?.Dispose();
+            _path?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }

@@ -31,6 +31,15 @@
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
+  <!--
+    Visual Studio design-time builds and MSBuild solution-level orchestration may call
+    ResolveProjectReferences on this project's outer cross-targeting build (where TargetFramework
+    is empty and the SDK does not import Microsoft.Common.CurrentVersion.targets, so the real
+    ResolveProjectReferences is absent).  Glass.Message has no <ProjectReference> items, so this
+    stub is identical in effect to the SDK-provided target — it just prevents the build error.
+  -->
+  <Target Name="ResolveProjectReferences" Condition="'$(TargetFramework)' == ''" />
+
   <!-- Auto-sign every output DLL with the dev Authenticode cert (run tools\Setup-DevCert.ps1 once first) -->
   <Target Name="SignOutput" AfterTargets="Build">
     <PropertyGroup>
@@ -49,8 +58,8 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
-  <!-- .NET 8 Windows — Registry package (built into .NET Framework, needs package on .NET 8) -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+  <!-- .NET Core / .NET 5+ — Registry is in-box on Framework but needs a package reference on modern .NET -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net481'">
     <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
   </ItemGroup>
 

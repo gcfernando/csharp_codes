@@ -1071,6 +1071,7 @@ internal sealed class GlassDialog : Form
         g.CompositingQuality = CompositingQuality.HighQuality;
         g.InterpolationMode  = InterpolationMode.HighQualityBicubic;
         g.SmoothingMode      = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode    = PixelOffsetMode.HighQuality;
         g.TextRenderingHint  = TextRenderingHint.ClearTypeGridFit;
     }
 
@@ -1096,6 +1097,8 @@ internal sealed class GlassDialog : Form
         private readonly int  _max;
         private float         _phase; // continuously increasing angle (radians)
         private System.Windows.Forms.Timer _ticker;
+        private GraphicsPath  _trackPath;
+        private Size          _trackSize;
 
         public GlassProgressPanel(GlassTheme theme, int value, int max)
         {
@@ -1120,6 +1123,14 @@ internal sealed class GlassDialog : Form
             }
         }
 
+        protected override void OnResize(EventArgs e)
+        {
+            _trackPath?.Dispose();
+            _trackPath = null;
+            base.OnResize(e);
+            Invalidate();
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             var g    = e.Graphics;
@@ -1127,14 +1138,19 @@ internal sealed class GlassDialog : Form
             var rect = new Rectangle(0, 0, Width - 1, Height - 1);
             var r    = Height / 2;
 
-            // Track
-            using var bgPath  = RoundRect(rect, r);
-            using var bgBrush = new SolidBrush(Color.FromArgb(30, _theme.AccentColor));
-            g.FillPath(bgBrush, bgPath);
+            // Track (cached — no GDI+ alloc per frame)
+            if (_trackPath == null || _trackSize != Size)
+            {
+                _trackPath?.Dispose();
+                _trackSize = Size;
+                _trackPath = RoundRect(rect, r);
+            }
+
+            using (var bgBrush = new SolidBrush(Color.FromArgb(30, _theme.AccentColor)))
+                g.FillPath(bgBrush, _trackPath);
 
             if (_value == -1) // ── Indeterminate ────────────────────────────
             {
-                // Sine oscillation: t goes 0→1→0 smoothly — no wrap-jump
                 var t     = (float)((1.0 + Math.Sin(_phase - Math.PI / 2.0)) / 2.0);
                 var fw    = Math.Max(Height * 2, Width / 3);
                 var fx    = (int)(t * (Width - fw));
@@ -1143,18 +1159,15 @@ internal sealed class GlassDialog : Form
                 if (fRect.Width > 0)
                 {
                     using var fp = RoundRect(fRect, r);
-                    // Center-peak gradient: dim→bright→dim (shimmer / glow effect)
                     using var fb = new LinearGradientBrush(
                         new Rectangle(fRect.X, fRect.Y,
                                       Math.Max(1, fRect.Width),
                                       Math.Max(1, fRect.Height)),
-                        Color.FromArgb(80,  _theme.AccentColor),
+                        Color.FromArgb(80, _theme.AccentColor),
                         _theme.AccentColor,
                         LinearGradientMode.Horizontal);
                     fb.SetBlendTriangularShape(0.5f, 1.0f);
-
-                    // Clip fill to track shape so ends stay rounded
-                    g.SetClip(bgPath);
+                    g.SetClip(_trackPath);
                     g.FillPath(fb, fp);
                     g.ResetClip();
                 }
@@ -1168,18 +1181,38 @@ internal sealed class GlassDialog : Form
                     using var fp = RoundRect(fRect, r);
                     using var fb = new LinearGradientBrush(fRect,
                         _theme.AccentColor, _theme.BorderColor, 0f);
+                    g.SetClip(_trackPath);
                     g.FillPath(fb, fp);
+
+                    // Top-half shine highlight
+                    if (fw > 4)
+                    {
+                        var shineH    = Math.Max(1, (Height - 1) / 2);
+                        var shineRect = new Rectangle(0, 0, fw, shineH);
+                        using var shine = new LinearGradientBrush(
+                            new Rectangle(0, 0, Math.Max(1, fw), Math.Max(1, shineH)),
+                            Color.FromArgb(70, 255, 255, 255),
+                            Color.FromArgb(0,  255, 255, 255),
+                            LinearGradientMode.Vertical);
+                        g.FillRectangle(shine, shineRect);
+                    }
+                    g.ResetClip();
                 }
             }
 
             // Border
             using var pen = new Pen(Color.FromArgb(70, _theme.BorderColor), 1f);
-            g.DrawPath(pen, bgPath);
+            g.DrawPath(pen, _trackPath);
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { _ticker?.Stop(); _ticker?.Dispose(); }
+            if (disposing)
+            {
+                _ticker?.Stop();
+                _ticker?.Dispose();
+                _trackPath?.Dispose();
+            }
             base.Dispose(disposing);
         }
     }
