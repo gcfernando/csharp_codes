@@ -97,7 +97,7 @@ public static class GlassToast
 
     private static void PositionToast(ToastForm form, ToastPosition pos)
     {
-        var screen = Screen.PrimaryScreen.WorkingArea;
+        var screen = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
         const int margin = 12;
 
         int stackedH = 0;
@@ -118,7 +118,7 @@ public static class GlassToast
 
         lock (_lock)
         {
-            var screen = Screen.PrimaryScreen.WorkingArea;
+            var screen = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
             const int margin = 12;
             int stackedH = 0;
 
@@ -165,6 +165,7 @@ public static class GlassToast
         private readonly GlassTheme        _theme;
         private readonly Bitmap            _icon;            // from shared cache; never disposed here
         private readonly int               _effectiveRadius;
+        private bool                       _dwmRounded;      // DWM owns the corners (Win11+)
         internal ToastPosition Position => _opts.Position;
 
         private System.Windows.Forms.Timer _fadeTimer;
@@ -228,9 +229,20 @@ public static class GlassToast
 
         private void ApplyRegion()
         {
-            if (_effectiveRadius <= 0) { Region = null; return; }
+            if (_effectiveRadius <= 0 || _dwmRounded) { Region = null; return; }
             using var path = GlassDialog.RoundRect(new Rectangle(0, 0, Width, Height), _effectiveRadius);
             Region = new Region(path);
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (_effectiveRadius > 0 && GlassDialog.EnableModernCorners(Handle))
+            {
+                _dwmRounded = true;
+                Region = null;
+                Invalidate();
+            }
         }
 
         protected override void OnLoad(EventArgs e) { base.OnLoad(e); StartFade(fadingIn: true); }
@@ -243,18 +255,20 @@ public static class GlassToast
             _fadeTimer.Tick += (s, ev) =>
             {
                 _fadeStep++;
-                var t = Math.Min(1.0, (double)_fadeStep / _fadeTicks);
+                var t      = Math.Min(1.0, (double)_fadeStep / _fadeTicks);
+                var eased  = t * t * (3.0 - 2.0 * t);   // smoothstep, matches the dialog easing
 
                 Opacity = _fadingOut
-                    ? _theme.Opacity * (1.0 - t)
-                    : _theme.Opacity * t;
+                    ? _theme.Opacity * (1.0 - eased)
+                    : _theme.Opacity * eased;
 
                 if (_fadeStep >= _fadeTicks)
                 {
                     _fadeTimer.Stop(); _fadeTimer.Dispose(); _fadeTimer = null;
                     if (!_fadingOut)
                     {
-                        _stayTimer = new System.Windows.Forms.Timer { Interval = _opts.DurationMs };
+                        // Timer.Interval must be >= 1; a non-positive DurationMs would otherwise throw.
+                        _stayTimer = new System.Windows.Forms.Timer { Interval = Math.Max(1, _opts.DurationMs) };
                         _stayTimer.Tick += (ss, ee) => { _stayTimer.Stop(); _stayTimer.Dispose(); _stayTimer = null; BeginDismiss(); };
                         _stayTimer.Start();
                     }
@@ -281,7 +295,7 @@ public static class GlassToast
 
             var w = ClientSize.Width;
             var h = ClientSize.Height;
-            var r = _effectiveRadius;
+            var r = _dwmRounded ? 0 : _effectiveRadius;
 
             using (var path  = GlassDialog.RoundRect(new Rectangle(0, 0, w, h), r))
             using (var brush = new LinearGradientBrush(

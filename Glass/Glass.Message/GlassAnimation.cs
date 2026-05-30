@@ -9,7 +9,7 @@ public enum GlassAnimation
     /// <summary>Slides in from slightly above the final position while fading, reverses on close.</summary>
     SlideDown,
 
-    /// <summary>Scales from 90 % to full size while fading in (currently aliases to Fade).</summary>
+    /// <summary>Scales from 90 % to full size while fading in, and back to 90 % while fading out.</summary>
     Scale,
 
     /// <summary>No animation — dialog appears and disappears instantly.</summary>

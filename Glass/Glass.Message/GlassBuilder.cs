@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -105,7 +106,9 @@ public sealed class GlassBuilder
 
     // ── Auto-close ────────────────────────────────────────────────────────
 
-    public GlassBuilder AutoClose(int milliseconds) { _autoCloseMs = milliseconds; return this; }
+    /// <summary>Auto-closes the dialog (returning the default button) after the given delay.
+    /// Values &lt;= 0 disable auto-close.</summary>
+    public GlassBuilder AutoClose(int milliseconds) { _autoCloseMs = Math.Max(0, milliseconds); return this; }
 
     // ── Checkbox ──────────────────────────────────────────────────────────
 

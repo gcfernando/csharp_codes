@@ -93,6 +93,22 @@ public static class GlassMessage
     // Internal core methods
     // ══════════════════════════════════════════════════════════════════════
 
+    // Single source of truth for assembling a basic config. UseRoundedCorners is left null so the
+    // GlassDialog inherits GlassMessage.UseRoundedCorners at construction time.
+    private static GlassDialogConfig BasicConfig(
+        string message, string title, MessageBoxIcon icon, MessageBoxButtons buttons,
+        MessageBoxDefaultButton defaultButton, GlassTheme theme, string[] customLabels)
+        => new GlassDialogConfig
+        {
+            Message       = message ?? string.Empty,
+            Title         = title   ?? string.Empty,
+            Icon          = icon,
+            Buttons       = buttons,
+            DefaultButton = defaultButton,
+            Theme         = theme ?? DefaultTheme ?? GlassTheme.Default,
+            CustomLabels  = customLabels,
+        };
+
     internal static DialogResult Core(
         IWin32Window           owner,
         string                 message,
@@ -103,18 +119,8 @@ public static class GlassMessage
         GlassTheme             theme,
         string[]               customLabels = null)
     {
-        // UseRoundedCorners left null → GlassDialog inherits from GlassMessage.UseRoundedCorners
-        var config = new GlassDialogConfig
-        {
-            Message       = message      ?? string.Empty,
-            Title         = title        ?? string.Empty,
-            Icon          = icon,
-            Buttons       = buttons,
-            DefaultButton = defaultButton,
-            Theme         = theme ?? DefaultTheme ?? GlassTheme.Default,
-            CustomLabels  = customLabels,
-        };
-        using var dlg = new GlassDialog(config);
+        using var dlg = new GlassDialog(
+            BasicConfig(message, title, icon, buttons, defaultButton, theme, customLabels));
         return owner == null ? dlg.ShowDialog() : dlg.ShowDialog(owner);
     }
 
@@ -140,18 +146,8 @@ public static class GlassMessage
     {
         var tcs = new TaskCompletionSource<DialogResult>(
                       TaskCreationOptions.RunContinuationsAsynchronously);
-        // UseRoundedCorners left null → GlassDialog inherits from GlassMessage.UseRoundedCorners
-        var config = new GlassDialogConfig
-        {
-            Message       = message      ?? string.Empty,
-            Title         = title        ?? string.Empty,
-            Icon          = icon,
-            Buttons       = buttons,
-            DefaultButton = defaultButton,
-            Theme         = theme ?? DefaultTheme ?? GlassTheme.Default,
-        };
-
-        var dlg = new GlassDialog(config);
+        var dlg = new GlassDialog(
+            BasicConfig(message, title, icon, buttons, defaultButton, theme, null));
 
         CancellationTokenRegistration reg = default;
         if (ct.CanBeCanceled)

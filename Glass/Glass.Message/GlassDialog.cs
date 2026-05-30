@@ -84,6 +84,7 @@ internal sealed class GlassDialog : Form
     private ComboBox    _inputCombo;
     private LinkLabel   _detailToggle;
     private GlassButton _countdownBtn;
+    private string      _countdownBaseLabel = string.Empty;   // cached: avoids recomputing per tick
     private Font        _detailFont;
 
     internal bool   CheckBoxChecked => _checkBoxCtrl?.Checked ?? false;
@@ -96,8 +97,12 @@ internal sealed class GlassDialog : Form
     private double       _targetOpacity;
     private bool         _fadingOut;
     private DialogResult _pendingResult;
-    private int          _fadeStep;
-    private const int    _fadeTicks = 9;  // 9 × 16 ms ≈ 144 ms
+
+    // Time-based animation: progress is derived from elapsed wall-clock time, so the duration
+    // stays constant and the motion stays smooth even when the WinForms timer ticks unevenly.
+    private readonly System.Diagnostics.Stopwatch _animClock = new();
+    private const int _animDurationMs = 170;
+    private double    _closeFromAppear = 1.0;   // visibility at the moment a fade-out begins
 
     private Point _slideFinal, _slideOrigin;
     private bool  _slideActive;
@@ -148,6 +153,9 @@ internal sealed class GlassDialog : Form
         public int SizeOfData;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
     [DllImport("user32.dll")]
     private static extern bool SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttribData data);
 
@@ -159,6 +167,28 @@ internal sealed class GlassDialog : Form
 
     private bool _acrylicEnabled;
     private bool _micaEnabled;
+    private bool _dwmRounded;   // true → DWM renders smooth native corners; skip the GDI region clip
+
+    // DWM constants for the modern Windows 11 window corner preference.
+    private const int _dwmwaWindowCornerPreference = 33;
+    private const int _dwmwcpRound                 = 2;
+
+    /// <summary>
+    /// Asks DWM to render smooth, native rounded corners (+ shadow) for the given borderless window.
+    /// Returns <c>true</c> on Windows 11+ where the attribute is honoured; the caller should then
+    /// drop any manual GDI <see cref="Region"/> so the compositor owns the (anti-aliased) corners.
+    /// </summary>
+    internal static bool EnableModernCorners(IntPtr handle)
+    {
+        var v = Environment.OSVersion.Version;
+        if (!(v.Major == 10 && v.Build >= 22000)) return false;   // Windows 11+ only
+        try
+        {
+            int pref = _dwmwcpRound;
+            return DwmSetWindowAttribute(handle, _dwmwaWindowCornerPreference, ref pref, sizeof(int)) == 0;
+        }
+        catch { return false; }
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // Thread-safe cached system icons (#12) — Lazy ensures one-time init
@@ -236,14 +266,25 @@ internal sealed class GlassDialog : Form
         ApplyRegion(fw, fh);
         AddControls(fw, fh);
 
-        var wa = Screen.PrimaryScreen.WorkingArea;
+        var wa = PrimaryWorkingArea;
         Location = new Point(wa.Left + (wa.Width - fw) / 2, wa.Top + (wa.Height - fh) / 2);
         ResumeLayout(false);
     }
 
-    private void Rebuild()
+    // Null-safe primary work area — Screen.PrimaryScreen can be null in headless/session-0 contexts.
+    private static Rectangle PrimaryWorkingArea =>
+        Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
+
+    private void Rebuild(Screen recenterOn = null)
     {
         SuspendLayout();
+
+        // Preserve live user state across the teardown — expanding/collapsing the detail
+        // panel (or a DPI change) must not discard typed input, the combo selection, or the checkbox.
+        var savedInputText = _inputTextBox != null && !_inputTextBox.IsDisposed ? _inputTextBox.Text : null;
+        var savedComboText = _inputCombo   != null && !_inputCombo.IsDisposed   ? _inputCombo.Text   : null;
+        var savedChecked   = _checkBoxCtrl != null && !_checkBoxCtrl.IsDisposed ? (bool?)_checkBoxCtrl.Checked : null;
+
         _detailFont?.Dispose();
         _detailFont = null;
 
@@ -253,6 +294,12 @@ internal sealed class GlassDialog : Form
             c.Dispose();
         }
         Controls.Clear();
+        _inputTextBox = null;
+        _inputCombo   = null;
+        _checkBoxCtrl = null;
+        _detailToggle = null;
+        _countdownBtn = null;
+        _countdownBaseLabel = string.Empty;
         InvalidateCache();
 
         _iconBitmap = _cfg.CustomIcon ?? GetCachedSystemIcon(_cfg.Icon);
@@ -262,8 +309,35 @@ internal sealed class GlassDialog : Form
         _closeBtnBounds = ComputeCloseBtnBounds(fw);
         ApplyRegion(fw, fh);
         AddControls(fw, fh);
+
+        // Restore captured state onto the freshly built controls.
+        if (savedInputText != null && _inputTextBox != null) _inputTextBox.Text = savedInputText;
+        if (savedComboText != null && _inputCombo   != null) _inputCombo.Text   = savedComboText;
+        if (savedChecked.HasValue && _checkBoxCtrl != null)  _checkBoxCtrl.Checked = savedChecked.Value;
+
+        // A DPI move re-centres on the destination monitor; a detail toggle keeps the user's
+        // chosen position and only nudges the (now taller) dialog back on-screen if it overflows.
+        if (recenterOn != null) CenterOn(recenterOn);
+        else                    ClampToScreen(Screen.FromRectangle(Bounds));
+
         ResumeLayout(false);
         Invalidate();
+    }
+
+    private void CenterOn(Screen screen)
+    {
+        var wa = screen.WorkingArea;
+        Location = new Point(
+            wa.Left + (wa.Width  - Width)  / 2,
+            wa.Top  + (wa.Height - Height) / 2);
+    }
+
+    private void ClampToScreen(Screen screen)
+    {
+        var wa = screen.WorkingArea;
+        var x  = Math.Min(Math.Max(Location.X, wa.Left), Math.Max(wa.Left, wa.Right  - Width));
+        var y  = Math.Min(Math.Max(Location.Y, wa.Top),  Math.Max(wa.Top,  wa.Bottom - Height));
+        Location = new Point(x, y);
     }
 
     private Rectangle ComputeCloseBtnBounds(int fw)
@@ -276,7 +350,9 @@ internal sealed class GlassDialog : Form
 
     private void ApplyRegion(int w, int h)
     {
-        if (_effectiveRadius <= 0) { Region = null; return; }
+        // When DWM owns the corners (Win11) we must NOT clip with a region — the compositor
+        // already rounds the window and a 1-bit region would re-introduce aliased edges.
+        if (_effectiveRadius <= 0 || _dwmRounded) { Region = null; return; }
         using var path = RoundRect(new Rectangle(0, 0, w, h), _effectiveRadius);
         Region = new Region(path);
     }
@@ -286,7 +362,7 @@ internal sealed class GlassDialog : Form
     // ═══════════════════════════════════════════════════════════════════════
     private (int w, int h) MeasureForm()
     {
-        var maxW     = Math.Min((int)(Screen.PrimaryScreen.WorkingArea.Width * 0.80), Scale(720));
+        var maxW     = Math.Min((int)(PrimaryWorkingArea.Width * 0.80), Scale(720));
         var iconColW = _iconBitmap != null ? IconSize + Pad : 0;
         var textMaxW = maxW - Pad * 2 - iconColW;
 
@@ -449,14 +525,11 @@ internal sealed class GlassDialog : Form
         if (_cfg.HasCheckBox)
         {
             y += Scale(8);
-            _checkBoxCtrl = new CheckBox
+            _checkBoxCtrl = new GlassCheckBox(_theme, _scale, _cfg.RightToLeft)
             {
                 Text           = _cfg.CheckBoxLabel,
                 Font           = _theme.MessageFont,
-                ForeColor      = _theme.MessageColor,
-                BackColor      = Color.Transparent,
                 Checked        = _cfg.CheckBoxDefault,
-                AutoSize       = true,
                 Location       = new Point(_msgLeft, y),
                 AccessibleRole = AccessibleRole.CheckButton,
             };
@@ -541,7 +614,11 @@ internal sealed class GlassDialog : Form
             {
                 ActiveControl = btn;
                 AcceptButton  = btn;   // #1: Enter key activates default button
-                if (_cfg.AutoCloseMs > 0) _countdownBtn = btn;
+                if (_cfg.AutoCloseMs > 0)
+                {
+                    _countdownBtn       = btn;
+                    _countdownBaseLabel = label;   // the default button's resolved label
+                }
             }
         }
     }
@@ -561,7 +638,14 @@ internal sealed class GlassDialog : Form
         if (e.Control && e.KeyCode == Keys.C)
         {
             var text = string.IsNullOrEmpty(_cfg.Title) ? _cfg.Message : $"{_cfg.Title}\n{_cfg.Message}";
-            Clipboard.SetText(text);
+            // Clipboard.SetText throws on empty text and can throw ExternalException when the
+            // clipboard is momentarily locked by another process — both are non-fatal here.
+            if (!string.IsNullOrEmpty(text))
+            {
+                try { Clipboard.SetText(text); }
+                catch (System.Runtime.InteropServices.ExternalException) { }
+                catch (System.Threading.ThreadStateException) { }
+            }
             e.Handled = true;
             return;
         }
@@ -673,30 +757,19 @@ internal sealed class GlassDialog : Form
         _countdownBtn?.Invalidate();
     }
 
-    // #9: DRY — shared base-label resolution used by UpdateCountdownLabel + StopCountdown
-    private string GetDefaultButtonLabel()
-    {
-        var defs = ButtonDefs(_cfg.Buttons);
-        if (_cfg.RightToLeft) Array.Reverse(defs);
-        var idx = DefaultIndex(_cfg.Buttons, _cfg.DefaultButton);
-        if (_cfg.RightToLeft) idx = defs.Length - 1 - idx;
-        if (_cfg.CustomLabels != null && idx < _cfg.CustomLabels.Length)
-            return _cfg.CustomLabels[idx];
-        return idx < defs.Length ? defs[idx].label : string.Empty;
-    }
-
     private void UpdateCountdownLabel()
     {
         if (_countdownBtn == null) return;
-        var seconds   = Math.Max(0, _countRemaining / 1000);
-        var baseLabel = GetDefaultButtonLabel();
-        _countdownBtn.Text = seconds > 0 ? $"{baseLabel} ({seconds}s)" : baseLabel;
+        var seconds = Math.Max(0, _countRemaining / 1000);
+        _countdownBtn.Text = seconds > 0
+            ? $"{_countdownBaseLabel} ({seconds}s)"
+            : _countdownBaseLabel;
     }
 
     private void StopCountdown()
     {
         if (_countdownBtn != null)
-            _countdownBtn.Text = GetDefaultButtonLabel();
+            _countdownBtn.Text = _countdownBaseLabel;
 
         if (_countTimer == null) return;
         _countTimer.Stop();
@@ -715,7 +788,6 @@ internal sealed class GlassDialog : Form
         else
         {
             Opacity    = 0.0;
-            _fadeStep  = 0;
             _fadingOut = false;
         }
     }
@@ -778,8 +850,9 @@ internal sealed class GlassDialog : Form
             return;
         }
 
-        var ratio = _targetOpacity > 0 ? Opacity / _targetOpacity : 0.0;
-        _fadeStep = (int)((1.0 - ratio) * _fadeTicks);
+        // Continue the fade-out from however visible the dialog currently is (handles a close
+        // requested mid-entrance) so there is no opacity pop.
+        _closeFromAppear = _targetOpacity > 0 ? Math.Min(1.0, Opacity / _targetOpacity) : 0.0;
 
         if (_cfg.Animation == GlassAnimation.SlideDown)
         {
@@ -800,7 +873,8 @@ internal sealed class GlassDialog : Form
 
     private void StartFadeTimer()
     {
-        _fadeTimer      = new System.Windows.Forms.Timer { Interval = 16 };
+        _animClock.Restart();
+        _fadeTimer      = new System.Windows.Forms.Timer { Interval = 15 };
         _fadeTimer.Tick += OnFadeTick;
         _fadeTimer.Start();
     }
@@ -811,75 +885,72 @@ internal sealed class GlassDialog : Form
         _fadeTimer.Stop();
         _fadeTimer.Dispose();
         _fadeTimer = null;
+        _animClock.Stop();
     }
 
     private void OnFadeTick(object sender, EventArgs e)
     {
-        _fadeStep++;
+        var t    = Math.Min(1.0, _animClock.Elapsed.TotalMilliseconds / _animDurationMs);
+        var done = t >= 1.0;
 
+        // appear   = how visible the dialog is (drives opacity + scale)
+        // slideDisp = 0→1 progress along the slide path, regardless of direction
+        double appear, slideDisp;
         if (_fadingOut)
         {
-            var linear = Math.Max(0.0, 1.0 - (double)_fadeStep / _fadeTicks);
-            var ratio  = Ease(linear);     // #6 smoothstep
-            Opacity    = _targetOpacity * ratio;
-
-            if (_slideActive && _cfg.Animation == GlassAnimation.SlideDown)
-                Location = new Point(_slideFinal.X,
-                    _slideOrigin.Y + (int)((1.0 - ratio) * (_slideFinal.Y - _slideOrigin.Y)));
-
-            if (_scaleActive && _cfg.Animation == GlassAnimation.Scale)
-            {
-                var sf  = 0.90f + 0.10f * (float)ratio;
-                var nsw = (int)(_scaleFinalSize.Width  * sf);
-                var nsh = (int)(_scaleFinalSize.Height * sf);
-                SuspendLayout();
-                SetBounds(_scaleFinalLoc.X + (_scaleFinalSize.Width  - nsw) / 2,
-                          _scaleFinalLoc.Y + (_scaleFinalSize.Height - nsh) / 2, nsw, nsh);
-                ResumeLayout(false);
-            }
-
-            if (_fadeStep >= _fadeTicks)
-            {
-                DisposeFadeTimer();
-                _scaleActive = false;
-                DialogResult = _pendingResult;
-            }
+            var eased = Ease(1.0 - t);
+            appear    = _closeFromAppear * eased;
+            slideDisp = 1.0 - eased;
         }
         else
         {
-            var linear = Math.Min(1.0, (double)_fadeStep / _fadeTicks);
-            var ratio  = Ease(linear);     // #6 smoothstep
-            Opacity    = _targetOpacity * ratio;
+            var eased = Ease(t);
+            appear    = eased;
+            slideDisp = eased;
+        }
 
-            if (_slideActive && _cfg.Animation == GlassAnimation.SlideDown)
-                Location = new Point(_slideFinal.X,
-                    _slideOrigin.Y + (int)(ratio * (_slideFinal.Y - _slideOrigin.Y)));
+        ApplyAnimationFrame(appear, slideDisp);
 
-            if (_scaleActive && _cfg.Animation == GlassAnimation.Scale)
+        if (!done) return;
+
+        DisposeFadeTimer();
+        if (_fadingOut)
+        {
+            _scaleActive = false;
+            DialogResult = _pendingResult;
+        }
+        else
+        {
+            Opacity = _targetOpacity;
+            if (_slideActive) { Location = _slideFinal; _slideActive = false; }
+            if (_scaleActive)
             {
-                var sf  = 0.90f + 0.10f * (float)ratio;
-                var nsw = (int)(_scaleFinalSize.Width  * sf);
-                var nsh = (int)(_scaleFinalSize.Height * sf);
                 SuspendLayout();
-                SetBounds(_scaleFinalLoc.X + (_scaleFinalSize.Width  - nsw) / 2,
-                          _scaleFinalLoc.Y + (_scaleFinalSize.Height - nsh) / 2, nsw, nsh);
+                SetBounds(_scaleFinalLoc.X, _scaleFinalLoc.Y, _scaleFinalSize.Width, _scaleFinalSize.Height);
                 ResumeLayout(false);
+                _scaleActive = false;
             }
+        }
+    }
 
-            if (_fadeStep >= _fadeTicks)
-            {
-                Opacity = _targetOpacity;
-                DisposeFadeTimer();
-                if (_slideActive) { Location = _slideFinal; _slideActive = false; }
-                if (_scaleActive)
-                {
-                    SuspendLayout();
-                    SetBounds(_scaleFinalLoc.X, _scaleFinalLoc.Y,
-                              _scaleFinalSize.Width, _scaleFinalSize.Height);
-                    ResumeLayout(false);
-                    _scaleActive = false;
-                }
-            }
+    /// <summary>Applies a single animation frame shared by fade-in and fade-out.</summary>
+    private void ApplyAnimationFrame(double appear, double slideDisp)
+    {
+        Opacity = _targetOpacity * appear;
+
+        if (_slideActive && _cfg.Animation == GlassAnimation.SlideDown)
+            Location = new Point(_slideFinal.X,
+                _slideOrigin.Y + (int)(slideDisp * (_slideFinal.Y - _slideOrigin.Y)));
+
+        if (_scaleActive && _cfg.Animation == GlassAnimation.Scale)
+        {
+            var sf  = 0.90f + 0.10f * (float)appear;
+            var nsw = (int)(_scaleFinalSize.Width  * sf);
+            var nsh = (int)(_scaleFinalSize.Height * sf);
+            SuspendLayout();
+            SetBounds(_scaleFinalLoc.X + (_scaleFinalSize.Width  - nsw) / 2,
+                      _scaleFinalLoc.Y + (_scaleFinalSize.Height - nsh) / 2, nsw, nsh);
+            ResumeLayout(false);
         }
     }
 
@@ -891,7 +962,16 @@ internal sealed class GlassDialog : Form
         if (m.Msg == _wmDpiChanged)
         {
             _scale = (m.WParam.ToInt32() & 0xFFFF) / 96f;
-            Rebuild();
+
+            // lParam carries the suggested window rectangle on the new monitor; centre the
+            // re-measured dialog on that monitor so a cross-DPI move lands on the right screen.
+            Screen target = null;
+            if (m.LParam != IntPtr.Zero)
+            {
+                var r = Marshal.PtrToStructure<RECT>(m.LParam);
+                target = Screen.FromRectangle(Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom));
+            }
+            Rebuild(target);
         }
         base.WndProc(ref m);
     }
@@ -903,6 +983,14 @@ internal sealed class GlassDialog : Form
     {
         base.OnHandleCreated(e);
         if (!TryApplyMica()) TryApplyAcrylic();
+
+        // Prefer native DWM corner rounding over the aliased 1-bit GDI region.
+        if (_effectiveRadius > 0 && EnableModernCorners(Handle))
+        {
+            _dwmRounded = true;
+            Region = null;     // DWM now masks the corners smoothly
+            Invalidate();
+        }
     }
 
     private bool TryApplyMica()
@@ -973,7 +1061,9 @@ internal sealed class GlassDialog : Form
 
         var w = ClientSize.Width;
         var h = ClientSize.Height;
-        var r = _effectiveRadius;
+        // When DWM rounds the window, paint square shapes and let the compositor clip the
+        // corners — this yields perfectly anti-aliased edges with no radius mismatch.
+        var r = _dwmRounded ? 0 : _effectiveRadius;
 
         // Background
         if (!_acrylicEnabled && !_micaEnabled)
@@ -1011,7 +1101,8 @@ internal sealed class GlassDialog : Form
             var closeSz   = cb.Width + Scale(4);
             var textLeft  = _cfg.RightToLeft ? (Pad + closeSz)   : Pad;
             var textRight = _cfg.RightToLeft ? (w - Pad)         : (w - Pad - closeSz);
-            var flags     = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine;
+            var flags     = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine
+                          | TextFormatFlags.EndEllipsis;
             flags |= _cfg.RightToLeft
                 ? TextFormatFlags.Right | TextFormatFlags.RightToLeft
                 : TextFormatFlags.Left;
@@ -1239,6 +1330,99 @@ internal sealed class GlassDialog : Form
         {
             if (disposing) { _ticker?.Stop(); _ticker?.Dispose(); _trackPath?.Dispose(); }
             base.Dispose(disposing);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Nested: owner-drawn checkbox that honours GlassTheme.CheckBoxColor so the
+    // glyph blends with the glass palette instead of the stock white Win32 box.
+    // ═══════════════════════════════════════════════════════════════════════
+    private sealed class GlassCheckBox : CheckBox
+    {
+        private readonly GlassTheme _theme;
+        private readonly float      _scale;
+        private readonly bool       _rtl;
+        private bool _hover;
+
+        public GlassCheckBox(GlassTheme theme, float scale, bool rtl)
+        {
+            _theme = theme;
+            _scale = scale;
+            _rtl   = rtl;
+            AutoSize  = true;
+            BackColor = Color.Transparent;
+            ForeColor = theme.MessageColor;
+            Cursor    = Cursors.Hand;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.AllPaintingInWmPaint  |
+                     ControlStyles.UserPaint             |
+                     ControlStyles.SupportsTransparentBackColor |
+                     ControlStyles.ResizeRedraw, true);
+        }
+
+        private int Box => Math.Max(14, (int)(15 * _scale));
+        private int Gap => Math.Max(6,  (int)(8  * _scale));
+
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            var ts = TextRenderer.MeasureText(Text, Font);
+            return new Size(Box + Gap + ts.Width + 2, Math.Max(Box, ts.Height) + 2);
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { _hover = true;  Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnGotFocus(EventArgs e)   { Invalidate(); base.OnGotFocus(e); }
+        protected override void OnLostFocus(EventArgs e)  { Invalidate(); base.OnLostFocus(e); }
+
+        protected override void OnPaint(PaintEventArgs pe)
+        {
+            var g = pe.Graphics;
+            SetQuality(g);
+
+            var box  = Box;
+            var rect = new Rectangle(_rtl ? Width - box : 0, (Height - box) / 2, box - 1, box - 1);
+
+            using (var path = RoundRect(rect, Math.Max(2, (int)(3 * _scale))))
+            {
+                using (var fill = new SolidBrush(Checked
+                           ? _theme.CheckBoxColor
+                           : Color.FromArgb(40, _theme.InputBackColor)))
+                    g.FillPath(fill, path);
+
+                using (var border = new Pen(
+                           Color.FromArgb(_hover || Focused ? 230 : 150, _theme.CheckBoxColor), 1f))
+                    g.DrawPath(border, path);
+
+                if (Checked)
+                {
+                    using var tick = new Pen(Color.White, Math.Max(1.6f, _scale * 1.8f))
+                    {
+                        StartCap = LineCap.Round,
+                        EndCap   = LineCap.Round,
+                        LineJoin = LineJoin.Round,
+                    };
+                    float l = rect.Left, t = rect.Top, w = rect.Width, h = rect.Height;
+                    g.DrawLines(tick, new[]
+                    {
+                        new PointF(l + w * 0.22f, t + h * 0.52f),
+                        new PointF(l + w * 0.42f, t + h * 0.72f),
+                        new PointF(l + w * 0.78f, t + h * 0.26f),
+                    });
+                }
+            }
+
+            var textX = _rtl ? 0 : box + Gap;
+            var textW = Width - box - Gap;
+            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
+                        (_rtl ? TextFormatFlags.Right | TextFormatFlags.RightToLeft : TextFormatFlags.Left);
+            TextRenderer.DrawText(g, Text, Font, new Rectangle(textX, 0, textW, Height), ForeColor, flags);
+
+            if (Focused)
+            {
+                var tw = Math.Min(textW, TextRenderer.MeasureText(Text, Font).Width + 2);
+                using var fp = new Pen(Color.FromArgb(130, _theme.AccentColor), 1f) { DashStyle = DashStyle.Dot };
+                g.DrawRectangle(fp, new Rectangle(_rtl ? Width - box - Gap - tw : textX, 1, Math.Max(1, tw), Height - 3));
+            }
         }
     }
 

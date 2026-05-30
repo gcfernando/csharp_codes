@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net481;net8.0-windows</TargetFrameworks>
+    <TargetFrameworks>net481;net8.0-windows;net9.0-windows;net10.0-windows</TargetFrameworks>
     <UseWindowsForms>true</UseWindowsForms>
     <OutputType>Library</OutputType>
     <AssemblyName>Glass.Message</AssemblyName>
@@ -21,7 +21,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>Glass.Message</PackageId>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Authors>Gehan Fernando</Authors>
     <Company>Gehan Fernando</Company>
     <Description>Next-level modern replacement for MessageBox on Windows — Mica/Acrylic backdrop, auto dark/light theme, animations, toast notifications, async API, inline input, countdown, expandable detail, progress bar, RTL, and more. Drop-in compatible: GlassMessage.Show(...) compiles as-is.</Description>
@@ -40,8 +40,10 @@
   -->
   <Target Name="ResolveProjectReferences" Condition="'$(TargetFramework)' == ''" />
 
-  <!-- Auto-sign every output DLL with the dev Authenticode cert (run tools\Setup-DevCert.ps1 once first) -->
-  <Target Name="SignOutput" AfterTargets="Build">
+  <!-- Auto-sign every output DLL with the dev Authenticode cert (run tools\Setup-DevCert.ps1 once first).
+       Condition skips the outer cross-targeting build (TargetFramework empty), where $(TargetPath) is
+       blank and signtool would otherwise be invoked with an empty path. -->
+  <Target Name="SignOutput" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
     <PropertyGroup>
       <_SignScript>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\tools\Sign-Output.ps1'))</_SignScript>
       <_ThumbprintFile>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\tools\cert-thumbprint.txt'))</_ThumbprintFile>
@@ -56,11 +58,6 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
-  </ItemGroup>
-
-  <!-- .NET Core / .NET 5+ — Registry is in-box on Framework but needs a package reference on modern .NET -->
-  <ItemGroup Condition="'$(TargetFramework)' != 'net481'">
-    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
   </ItemGroup>
 
 </Project>
