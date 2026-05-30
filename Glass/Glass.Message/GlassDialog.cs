@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
@@ -13,105 +14,115 @@ namespace Glass;
 internal sealed class GlassDialog : Form
 {
     // ═══════════════════════════════════════════════════════════════════════
-    // Base layout constants (unscaled pixels at 96 DPI)
+    // Layout constants (unscaled pixels at 96 DPI)
     // ═══════════════════════════════════════════════════════════════════════
-    private const int _titleHBase      = 36;
-    private const int _btnPanelHBase   = 58;
-    private const int _iconSizeBase    = 36;
-    private const int _padBase         = 16;
-    private const int _btnWBase        = 92;
-    private const int _btnHBase        = 30;
-    private const int _btnGapBase      = 8;
-    private const int _minFormWBase    = 360;
-    private const int _minFormHBase    = 160;
-    private const int _progressHBase   = 10;
-    private const int _inputHBase      = 34;
-    private const int _inputMLHBase    = 80;
-    private const int _checkHBase      = 24;
-    private const int _linkHBase       = 22;
-    private const int _detailHBase     = 100;
+    private const int _titleHBase    = 40;
+    private const int _btnPanelHBase = 60;
+    private const int _iconSizeBase  = 36;
+    private const int _padBase       = 16;
+    private const int _btnWBase      = 96;
+    private const int _btnHBase      = 32;
+    private const int _btnGapBase    = 8;
+    private const int _minFormWBase  = 360;
+    private const int _minFormHBase  = 164;
+    private const int _progressHBase = 10;
+    private const int _inputHBase    = 34;
+    private const int _inputMLHBase  = 80;
+    private const int _checkHBase    = 24;
+    private const int _linkHBase     = 22;
+    private const int _detailHBase   = 100;
+    private const int _closeBtnBase  = 20;   // close-button size
 
     // ═══════════════════════════════════════════════════════════════════════
     // DPI scaling
     // ═══════════════════════════════════════════════════════════════════════
     private float _scale = 1.0f;
-    private int   Scale(int v) => Math.Max(1, (int)(v * _scale));
+    private int Scale(int v) => Math.Max(1, (int)(v * _scale));
 
-    private int TitleH      => Scale(_titleHBase);
-    private int BtnPanelH   => Scale(_btnPanelHBase);
-    private int IconSize    => Scale(_iconSizeBase);
-    private int Pad         => Scale(_padBase);
-    private int BtnW        => Scale(_btnWBase);   // minimum; actual width set by MeasureForm
-    private int BtnH        => Scale(_btnHBase);
-    private int _computedBtnW; // measured from label text; set by MeasureForm, used by AddButtons
-    private int BtnGap      => Scale(_btnGapBase);
-    private int MinFormW    => Scale(_minFormWBase);
-    private int MinFormH    => Scale(_minFormHBase);
-    private int ProgressH   => Scale(_progressHBase);
-    private int InputH      => Scale(_inputHBase);
-    private int InputMLH    => Scale(_inputMLHBase);
-    private int CheckH      => Scale(_checkHBase);
-    private int LinkH       => Scale(_linkHBase);
-    private int DetailH     => Scale(_detailHBase);
+    private int TitleH    => Scale(_titleHBase);
+    private int BtnPanelH => Scale(_btnPanelHBase);
+    private int IconSize  => Scale(_iconSizeBase);
+    private int Pad       => Scale(_padBase);
+    private int BtnW      => Scale(_btnWBase);
+    private int BtnH      => Scale(_btnHBase);
+    private int BtnGap    => Scale(_btnGapBase);
+    private int MinFormW  => Scale(_minFormWBase);
+    private int MinFormH  => Scale(_minFormHBase);
+    private int ProgressH => Scale(_progressHBase);
+    private int InputH    => Scale(_inputHBase);
+    private int InputMLH  => Scale(_inputMLHBase);
+    private int CheckH    => Scale(_checkHBase);
+    private int LinkH     => Scale(_linkHBase);
+    private int DetailH   => Scale(_detailHBase);
+    private int CloseBtnSize => Scale(_closeBtnBase);
 
+    private int _computedBtnW;
     private const int _wmDpiChanged = 0x02E0;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Config & data
+    // Config & theme
     // ═══════════════════════════════════════════════════════════════════════
     private readonly GlassDialogConfig _cfg;
     private readonly GlassTheme        _theme;
+    private readonly int _effectiveRadius;
+    private readonly int _effectiveButtonRadius;
 
-    private Bitmap _iconBitmap;
+    private Bitmap _iconBitmap;  // from shared cache or caller-owned; never disposed here
     private Point  _dragOrigin;
     private bool   _dragging;
-    private bool   _isExpanded;     // detail section toggle state
+    private bool   _isExpanded;
 
-    // Cached layout measurements set by MeasureForm()
     private int _msgLeft, _msgW, _contentH;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Live control references (for state read-back)
-    // ═══════════════════════════════════════════════════════════════════════
-    private CheckBox      _checkBoxCtrl;
-    private TextBox       _inputTextBox;
-    private ComboBox      _inputCombo;
-    private LinkLabel     _detailToggle;
-    private GlassButton   _countdownBtn;
+    // ── Close button ──────────────────────────────────────────────────────
+    private Rectangle _closeBtnBounds;
+    private bool      _closeHover;
 
-    // ── Results ───────────────────────────────────────────────────────────
+    // ── Controls ──────────────────────────────────────────────────────────
+    private CheckBox    _checkBoxCtrl;
+    private TextBox     _inputTextBox;
+    private ComboBox    _inputCombo;
+    private LinkLabel   _detailToggle;
+    private GlassButton _countdownBtn;
+    private Font        _detailFont;
+
     internal bool   CheckBoxChecked => _checkBoxCtrl?.Checked ?? false;
     internal string InputText       => _inputTextBox?.Text ?? _inputCombo?.Text ?? string.Empty;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Fade / slide animation
+    // Fade / slide / scale animation
     // ═══════════════════════════════════════════════════════════════════════
     private System.Windows.Forms.Timer _fadeTimer;
     private double       _targetOpacity;
     private bool         _fadingOut;
     private DialogResult _pendingResult;
     private int          _fadeStep;
-    private const int    _fadeTicks = 8; // 8 × 16 ms ≈ 128 ms
+    private const int    _fadeTicks = 9;  // 9 × 16 ms ≈ 144 ms
 
-    private Point _slideFinal;
-    private Point _slideOrigin;
+    private Point _slideFinal, _slideOrigin;
     private bool  _slideActive;
 
+    private Size  _scaleFinalSize;
+    private Point _scaleFinalLoc;
+    private bool  _scaleActive;
+
+    // ── Smoothstep easing (#6) ────────────────────────────────────────────
+    private static double Ease(double t) => t * t * (3.0 - 2.0 * t);
+
     // ═══════════════════════════════════════════════════════════════════════
-    // Countdown timer
+    // Countdown
     // ═══════════════════════════════════════════════════════════════════════
     private System.Windows.Forms.Timer _countTimer;
-    private int _countRemaining;   // milliseconds remaining
+    private int _countRemaining;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // GDI+ resource cache (re-created on resize / DPI change)
+    // GDI+ resource cache
     // ═══════════════════════════════════════════════════════════════════════
-    private GraphicsPath          _bgPath;
-    private LinearGradientBrush   _bgBrush;
-    private LinearGradientBrush   _titleBrush;
-    private GraphicsPath          _borderPath;
+    private GraphicsPath        _bgPath;
+    private LinearGradientBrush _bgBrush;
+    private LinearGradientBrush _titleBrush;
+    private GraphicsPath        _borderPath;
 
-    // Fixed pens (created once, never depend on form size)
     private readonly Pen _glossPen;
     private readonly Pen _sepPen;
     private readonly Pen _glowPen;
@@ -119,7 +130,7 @@ internal sealed class GlassDialog : Form
     private readonly Pen _panelSepPen;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Win32 / DWM P-Invokes
+    // Win32 P-Invokes (only what is actually used)
     // ═══════════════════════════════════════════════════════════════════════
     [StructLayout(LayoutKind.Sequential)]
     private struct AccentPolicy
@@ -137,23 +148,34 @@ internal sealed class GlassDialog : Form
         public int SizeOfData;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MARGINS { public int Left, Right, Top, Bottom; }
-
     [DllImport("user32.dll")]
     private static extern bool SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttribData data);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessage(IntPtr hwnd, uint msg, uint wParam, string lParam);
 
     private bool _acrylicEnabled;
     private bool _micaEnabled;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Thread-safe cached system icons (#12) — Lazy ensures one-time init
+    // ═══════════════════════════════════════════════════════════════════════
+    private static readonly Lazy<Bitmap> _lazyInfo     = new(() => SystemIcons.Information.ToBitmap());
+    private static readonly Lazy<Bitmap> _lazyQuestion = new(() => SystemIcons.Question.ToBitmap());
+    private static readonly Lazy<Bitmap> _lazyWarning  = new(() => SystemIcons.Warning.ToBitmap());
+    private static readonly Lazy<Bitmap> _lazyError    = new(() => SystemIcons.Error.ToBitmap());
+
+    internal static Bitmap GetCachedSystemIcon(MessageBoxIcon icon) => icon switch
+    {
+        MessageBoxIcon.Information => _lazyInfo.Value,
+        MessageBoxIcon.Question    => _lazyQuestion.Value,
+        MessageBoxIcon.Warning     => _lazyWarning.Value,
+        MessageBoxIcon.Error       => _lazyError.Value,
+        _                          => null,
+    };
 
     // ═══════════════════════════════════════════════════════════════════════
     // Constructor
@@ -167,28 +189,25 @@ internal sealed class GlassDialog : Form
         using (var g = Graphics.FromHwnd(IntPtr.Zero))
             _scale = g.DpiX / 96f;
 
+        // #16: resolve UseRoundedCorners — null means inherit from global
+        bool useRounded        = cfg.UseRoundedCorners ?? GlassMessage.UseRoundedCorners;
+        _effectiveRadius       = useRounded ? _theme.CornerRadius       : 0;
+        _effectiveButtonRadius = useRounded ? _theme.ButtonCornerRadius : 0;
+
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
 
-        _glossPen    = new Pen(Color.FromArgb(50, 255, 255, 255), 1f);
-        _sepPen      = new Pen(Color.FromArgb(90, _theme.BorderColor), 1f);
-        _glowPen     = new Pen(Color.FromArgb(55, _theme.BorderColor), 3f);
-        _edgePen     = new Pen(Color.FromArgb(180, _theme.BorderColor), 1f);
-        _panelSepPen = new Pen(Color.FromArgb(40, _theme.BorderColor), 1f);
+        _glossPen    = new Pen(Color.FromArgb(55,  255, 255, 255), 1f);
+        _sepPen      = new Pen(Color.FromArgb(100, _theme.BorderColor), 1f);
+        _glowPen     = new Pen(Color.FromArgb(55,  _theme.BorderColor), 3f);
+        _edgePen     = new Pen(Color.FromArgb(190, _theme.BorderColor), 1f);
+        _panelSepPen = new Pen(Color.FromArgb(45,  _theme.BorderColor), 1f);
 
         Build();
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // CreateParams — drop shadow
-    // ─────────────────────────────────────────────────────────────────────
     protected override CreateParams CreateParams
     {
-        get
-        {
-            var cp = base.CreateParams;
-            cp.ClassStyle |= 0x00020000; // CS_DROPSHADOW
-            return cp;
-        }
+        get { var cp = base.CreateParams; cp.ClassStyle |= 0x00020000; return cp; } // CS_DROPSHADOW
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -197,140 +216,124 @@ internal sealed class GlassDialog : Form
     private void Build()
     {
         SuspendLayout();
-
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar   = false;
         ShowIcon        = false;
-        StartPosition   = FormStartPosition.Manual;   // we position in OnShown
+        StartPosition   = FormStartPosition.Manual;
         Opacity         = _cfg.Animation == GlassAnimation.None ? _targetOpacity : 0.0;
         Font            = _theme.MessageFont;
         BackColor       = _theme.BackgroundBottom;
         KeyPreview      = true;
-        // RightToLeftLayout is intentionally NOT set — WS_EX_LAYOUTRTL mirrors the
-        // entire window DC and breaks GDI+ custom painting (black/white artefact).
-        // RTL is implemented manually: icon on the right, text right-aligned.
-        RightToLeft = _cfg.RightToLeft ? RightToLeft.Yes : RightToLeft.No;
+        RightToLeft     = _cfg.RightToLeft ? RightToLeft.Yes : RightToLeft.No;
+        AccessibleName  = string.IsNullOrEmpty(_cfg.Title) ? "Dialog" : _cfg.Title;
+        AccessibleRole  = AccessibleRole.Alert;
 
-        // Accessibility
-        AccessibleName = string.IsNullOrEmpty(_cfg.Title) ? "Dialog" : _cfg.Title;
-        AccessibleRole = AccessibleRole.Alert;
-
-        _iconBitmap = _cfg.CustomIcon ?? ResolveSystemIcon(_cfg.Icon);
+        _iconBitmap = _cfg.CustomIcon ?? GetCachedSystemIcon(_cfg.Icon);
 
         var (fw, fh) = MeasureForm();
-        ClientSize = new Size(fw, fh);
+        ClientSize       = new Size(fw, fh);
+        _closeBtnBounds  = ComputeCloseBtnBounds(fw);
         ApplyRegion(fw, fh);
         AddControls(fw, fh);
 
-        // Temporary off-screen position — refined in OnShown
         var wa = Screen.PrimaryScreen.WorkingArea;
         Location = new Point(wa.Left + (wa.Width - fw) / 2, wa.Top + (wa.Height - fh) / 2);
-
         ResumeLayout(false);
     }
 
     private void Rebuild()
     {
         SuspendLayout();
-        foreach (Control c in Controls) c.Dispose();
+        _detailFont?.Dispose();
+        _detailFont = null;
+
+        foreach (Control c in Controls)
+        {
+            if (c is PictureBox pb) pb.Image = null;
+            c.Dispose();
+        }
         Controls.Clear();
         InvalidateCache();
 
-        if (_cfg.CustomIcon == null)
-        {
-            _iconBitmap?.Dispose();
-            _iconBitmap = ResolveSystemIcon(_cfg.Icon);
-        }
+        _iconBitmap = _cfg.CustomIcon ?? GetCachedSystemIcon(_cfg.Icon);
 
         var (fw, fh) = MeasureForm();
-        ClientSize = new Size(fw, fh);
+        ClientSize      = new Size(fw, fh);
+        _closeBtnBounds = ComputeCloseBtnBounds(fw);
         ApplyRegion(fw, fh);
         AddControls(fw, fh);
-
         ResumeLayout(false);
         Invalidate();
     }
 
+    private Rectangle ComputeCloseBtnBounds(int fw)
+    {
+        var size = CloseBtnSize;
+        var x    = _cfg.RightToLeft ? Pad : fw - Pad - size;
+        var y    = (TitleH - size) / 2;
+        return new Rectangle(x, y, size, size);
+    }
+
     private void ApplyRegion(int w, int h)
     {
-        if (_theme.CornerRadius <= 0) { Region = null; return; }
-        using var path = RoundRect(new Rectangle(0, 0, w, h), _theme.CornerRadius);
+        if (_effectiveRadius <= 0) { Region = null; return; }
+        using var path = RoundRect(new Rectangle(0, 0, w, h), _effectiveRadius);
         Region = new Region(path);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Layout measurement
+    // Layout measurement (#8: single message measurement pass)
     // ═══════════════════════════════════════════════════════════════════════
     private (int w, int h) MeasureForm()
     {
-        var maxW = Math.Min(
-            (int)(Screen.PrimaryScreen.WorkingArea.Width * 0.80),
-            Scale(720));
-
+        var maxW     = Math.Min((int)(Screen.PrimaryScreen.WorkingArea.Width * 0.80), Scale(720));
         var iconColW = _iconBitmap != null ? IconSize + Pad : 0;
-        var textMaxW = maxW - Pad - iconColW - Pad;
+        var textMaxW = maxW - Pad * 2 - iconColW;
 
-        // Button width: measure every label so text never clips.
-        // Custom labels and the countdown suffix " (NNs)" are included.
+        // Button widths
         var defs       = ButtonDefs(_cfg.Buttons);
         var defIdx     = DefaultIndex(_cfg.Buttons, _cfg.DefaultButton);
         var maxLabelPx = 0;
         for (var i = 0; i < defs.Length; i++)
         {
             var lbl = (_cfg.CustomLabels != null && i < _cfg.CustomLabels.Length)
-                ? _cfg.CustomLabels[i]
-                : defs[i].label;
-            // Reserve room for the widest possible countdown suffix " (NNs)"
-            if (_cfg.AutoCloseMs > 0 && i == defIdx)
-                lbl += $" ({_cfg.AutoCloseMs / 1000}s)";
-            maxLabelPx = Math.Max(maxLabelPx,
-                TextRenderer.MeasureText(lbl, _theme.ButtonFont).Width);
+                ? _cfg.CustomLabels[i] : defs[i].label;
+            if (_cfg.AutoCloseMs > 0 && i == defIdx) lbl += $" ({_cfg.AutoCloseMs / 1000}s)";
+            maxLabelPx = Math.Max(maxLabelPx, TextRenderer.MeasureText(lbl, _theme.ButtonFont).Width);
         }
-        _computedBtnW = Math.Max(BtnW, maxLabelPx + Scale(24)); // 12 px padding each side
+        _computedBtnW = Math.Max(BtnW, maxLabelPx + Scale(28));
         var btnMinW   = defs.Length * _computedBtnW + (defs.Length - 1) * BtnGap + Pad * 2;
 
-        // Title
+        // Title needs: text width + padding + close-button margin
         int titleNeedW = 0;
         if (_cfg.Title.Length > 0)
         {
             var sz = TextRenderer.MeasureText(_cfg.Title, _theme.TitleFont);
-            titleNeedW = sz.Width + Pad * 2 + iconColW + Scale(24); // close-btn margin
+            titleNeedW = sz.Width + Pad * 2 + Scale(24);   // #11: no iconColW here
         }
 
-        // Message
-        int msgNeedW = 0;
+        // Message — single pass (#8): sz.Height is reused directly
+        int msgNeedW = 0, msgH = 0;
         if (_cfg.Message.Length > 0)
         {
-            var sz = TextRenderer.MeasureText(_cfg.Message, _theme.MessageFont,
-                new Size(textMaxW, int.MaxValue),
-                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+            var sz   = TextRenderer.MeasureText(_cfg.Message, _theme.MessageFont,
+                           new Size(textMaxW, int.MaxValue),
+                           TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
             msgNeedW = sz.Width + iconColW + Pad * 2;
+            msgH     = sz.Height;
         }
 
         var w = Math.Max(Math.Max(Math.Max(titleNeedW, msgNeedW), MinFormW), btnMinW);
         if (_cfg.HasInput || _cfg.HasDetail) w = Math.Max(w, Scale(380));
 
-        // Message height at chosen width.
-        // RTL: icon sits on the right, so message starts at the left edge.
-        _msgLeft = _cfg.RightToLeft ? Pad : (Pad + iconColW);
-        _msgW    = w - Pad * 2 - iconColW;
-
-        int msgH = 0;
-        if (_cfg.Message.Length > 0)
-        {
-            var sz = TextRenderer.MeasureText(_cfg.Message, _theme.MessageFont,
-                new Size(_msgW, int.MaxValue),
-                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
-            msgH = sz.Height;
-        }
-
+        _msgLeft  = _cfg.RightToLeft ? Pad : Pad + iconColW;
+        _msgW     = w - Pad * 2 - iconColW;
         _contentH = Math.Max(msgH, _iconBitmap != null ? IconSize : 0);
 
-        // Accumulate total height
         var h = TitleH + Pad + _contentH;
-        if (_cfg.HasProgress)        h += Pad + ProgressH;
-        if (_cfg.HasInput)           h += Pad + (_cfg.InputMode == GlassInputMode.Multiline ? InputMLH : InputH);
-        if (_cfg.HasCheckBox)        h += Scale(8) + CheckH;
+        if (_cfg.HasProgress)   h += Pad + ProgressH;
+        if (_cfg.HasInput)      h += Pad + (_cfg.InputMode == GlassInputMode.Multiline ? InputMLH : InputH);
+        if (_cfg.HasCheckBox)   h += Scale(8) + CheckH;
         if (_cfg.HasDetail)
         {
             h += Scale(8) + LinkH;
@@ -349,10 +352,8 @@ internal sealed class GlassDialog : Form
     {
         var y = TitleH + Pad;
 
-        // ── Icon ──────────────────────────────────────────────────────────
         if (_iconBitmap != null)
         {
-            // RTL: icon on the right side
             var iconX = _cfg.RightToLeft ? fw - Pad - IconSize : Pad;
             Controls.Add(new PictureBox
             {
@@ -365,54 +366,50 @@ internal sealed class GlassDialog : Form
             });
         }
 
-        // ── Message ───────────────────────────────────────────────────────
         if (_cfg.Message.Length > 0)
         {
             Controls.Add(new Label
             {
-                Text           = _cfg.Message,
-                Font           = _theme.MessageFont,
-                ForeColor      = _theme.MessageColor,
-                BackColor      = Color.Transparent,
-                AutoSize       = false,
-                UseMnemonic    = false,
-                Bounds         = new Rectangle(_msgLeft, y, _msgW, _contentH),
-                TextAlign      = _cfg.RightToLeft ? ContentAlignment.TopRight : ContentAlignment.TopLeft,
-                AccessibleRole = AccessibleRole.StaticText,
+                Text                       = _cfg.Message,
+                Font                       = _theme.MessageFont,
+                ForeColor                  = _theme.MessageColor,
+                BackColor                  = Color.Transparent,
+                AutoSize                   = false,
+                UseMnemonic                = false,
+                UseCompatibleTextRendering = false,
+                Bounds                     = new Rectangle(_msgLeft, y, _msgW, _contentH),
+                TextAlign                  = _cfg.RightToLeft ? ContentAlignment.TopRight : ContentAlignment.TopLeft,
+                AccessibleRole             = AccessibleRole.StaticText,
             });
         }
 
         y += _contentH;
 
-        // ── Progress bar ─────────────────────────────────────────────────
         if (_cfg.HasProgress)
         {
             y += Pad;
-            var prog = new GlassProgressPanel(_theme, _cfg.ProgressValue, _cfg.ProgressMax)
+            Controls.Add(new GlassProgressPanel(_theme, _cfg.ProgressValue, _cfg.ProgressMax)
             {
-                Bounds = new Rectangle(Pad, y, fw - Pad * 2, ProgressH),
+                Bounds         = new Rectangle(Pad, y, fw - Pad * 2, ProgressH),
                 AccessibleName = "Progress",
                 AccessibleRole = AccessibleRole.ProgressBar,
-            };
-            Controls.Add(prog);
+            });
             y += ProgressH;
         }
 
-        // ── Input control ─────────────────────────────────────────────────
         if (_cfg.HasInput)
         {
             y += Pad;
-
             if (_cfg.InputMode == GlassInputMode.Dropdown)
             {
                 _inputCombo = new ComboBox
                 {
-                    Bounds        = new Rectangle(Pad, y, fw - Pad * 2, InputH),
-                    DropDownStyle = ComboBoxStyle.DropDownList,
-                    Font          = _theme.MessageFont,
-                    BackColor     = _theme.InputBackColor,
-                    ForeColor     = _theme.InputForeColor,
-                    FlatStyle     = FlatStyle.Flat,
+                    Bounds         = new Rectangle(Pad, y, fw - Pad * 2, InputH),
+                    DropDownStyle  = ComboBoxStyle.DropDownList,
+                    Font           = _theme.MessageFont,
+                    BackColor      = _theme.InputBackColor,
+                    ForeColor      = _theme.InputForeColor,
+                    FlatStyle      = FlatStyle.Flat,
                     AccessibleName = "Input",
                 };
                 if (_cfg.InputDropdownItems != null)
@@ -424,7 +421,6 @@ internal sealed class GlassDialog : Form
                 }
                 else if (_inputCombo.Items.Count > 0)
                     _inputCombo.SelectedIndex = 0;
-
                 Controls.Add(_inputCombo);
                 y += InputH;
             }
@@ -433,15 +429,15 @@ internal sealed class GlassDialog : Form
                 var inputH2 = _cfg.InputMode == GlassInputMode.Multiline ? InputMLH : InputH;
                 _inputTextBox = new PlaceholderTextBox(_cfg.InputPlaceholder ?? string.Empty)
                 {
-                    Bounds        = new Rectangle(Pad, y, fw - Pad * 2, inputH2),
-                    Font          = _theme.MessageFont,
-                    BackColor     = _theme.InputBackColor,
-                    ForeColor     = _theme.InputForeColor,
-                    BorderStyle   = BorderStyle.None,
-                    Multiline     = _cfg.InputMode == GlassInputMode.Multiline,
-                    ScrollBars    = _cfg.InputMode == GlassInputMode.Multiline ? ScrollBars.Vertical : ScrollBars.None,
-                    PasswordChar  = _cfg.InputMode == GlassInputMode.Password ? '●' : '\0',
-                    Text          = _cfg.InputDefault ?? string.Empty,
+                    Bounds         = new Rectangle(Pad + 3, y + 3, fw - Pad * 2 - 6, inputH2 - 6),
+                    Font           = _theme.MessageFont,
+                    BackColor      = _theme.InputBackColor,
+                    ForeColor      = _theme.InputForeColor,
+                    BorderStyle    = BorderStyle.None,
+                    Multiline      = _cfg.InputMode == GlassInputMode.Multiline,
+                    ScrollBars     = _cfg.InputMode == GlassInputMode.Multiline ? ScrollBars.Vertical : ScrollBars.None,
+                    PasswordChar   = _cfg.InputMode == GlassInputMode.Password ? '●' : '\0',
+                    Text           = _cfg.InputDefault ?? string.Empty,
                     AccessibleName = "Input",
                     AccessibleRole = AccessibleRole.Text,
                 };
@@ -450,40 +446,38 @@ internal sealed class GlassDialog : Form
             }
         }
 
-        // ── "Don't show again" checkbox ───────────────────────────────────
         if (_cfg.HasCheckBox)
         {
             y += Scale(8);
             _checkBoxCtrl = new CheckBox
             {
-                Text          = _cfg.CheckBoxLabel,
-                Font          = _theme.MessageFont,
-                ForeColor     = _theme.MessageColor,
-                BackColor     = Color.Transparent,
-                Checked       = _cfg.CheckBoxDefault,
-                AutoSize      = true,
-                Location      = new Point(_msgLeft, y),
+                Text           = _cfg.CheckBoxLabel,
+                Font           = _theme.MessageFont,
+                ForeColor      = _theme.MessageColor,
+                BackColor      = Color.Transparent,
+                Checked        = _cfg.CheckBoxDefault,
+                AutoSize       = true,
+                Location       = new Point(_msgLeft, y),
                 AccessibleRole = AccessibleRole.CheckButton,
             };
             Controls.Add(_checkBoxCtrl);
             y += CheckH;
         }
 
-        // ── Expandable detail toggle ───────────────────────────────────────
         if (_cfg.HasDetail)
         {
             y += Scale(8);
             _detailToggle = new LinkLabel
             {
-                Text          = _isExpanded ? "Hide details ▲" : "Show details ▼",
-                Font          = _theme.ButtonFont,
-                ForeColor     = _theme.AccentColor,
-                LinkColor     = _theme.AccentColor,
+                Text            = _isExpanded ? "Hide details ▲" : "Show details ▼",
+                Font            = _theme.ButtonFont,
+                ForeColor       = _theme.AccentColor,
+                LinkColor       = _theme.AccentColor,
                 ActiveLinkColor = _theme.BorderColor,
-                BackColor     = Color.Transparent,
-                AutoSize      = true,
-                Location      = new Point(_msgLeft, y),
-                AccessibleName = "Toggle detail panel",
+                BackColor       = Color.Transparent,
+                AutoSize        = true,
+                Location        = new Point(_msgLeft, y),
+                AccessibleName  = "Toggle detail panel",
             };
             _detailToggle.LinkClicked += OnDetailToggleClick;
             Controls.Add(_detailToggle);
@@ -492,18 +486,19 @@ internal sealed class GlassDialog : Form
             if (_isExpanded)
             {
                 y += Scale(6);
+                _detailFont = new Font("Consolas", 8.5f, FontStyle.Regular, GraphicsUnit.Point);
                 Controls.Add(new TextBox
                 {
-                    Text          = _cfg.DetailText,
-                    Font          = new Font("Consolas", 8.5f, FontStyle.Regular, GraphicsUnit.Point),
-                    BackColor     = Color.FromArgb(8, 15, 28),
-                    ForeColor     = Color.FromArgb(160, 175, 200),
-                    ReadOnly      = true,
-                    Multiline     = true,
-                    ScrollBars    = ScrollBars.Vertical,
-                    WordWrap      = true,
-                    BorderStyle   = BorderStyle.None,
-                    Bounds        = new Rectangle(Pad, y, fw - Pad * 2, DetailH),
+                    Text           = _cfg.DetailText,
+                    Font           = _detailFont,
+                    BackColor      = Color.FromArgb(8, 15, 28),
+                    ForeColor      = Color.FromArgb(160, 175, 200),
+                    ReadOnly       = true,
+                    Multiline      = true,
+                    ScrollBars     = ScrollBars.Vertical,
+                    WordWrap       = true,
+                    BorderStyle    = BorderStyle.None,
+                    Bounds         = new Rectangle(Pad, y, fw - Pad * 2, DetailH),
                     AccessibleName = "Detail",
                     AccessibleRole = AccessibleRole.Text,
                 });
@@ -511,7 +506,6 @@ internal sealed class GlassDialog : Form
             }
         }
 
-        // ── Buttons ───────────────────────────────────────────────────────
         AddButtons(fw, fh);
     }
 
@@ -533,7 +527,7 @@ internal sealed class GlassDialog : Form
             if (_cfg.CustomLabels != null && i < _cfg.CustomLabels.Length)
                 label = _cfg.CustomLabels[i];
 
-            var btn = new GlassButton(_theme)
+            var btn = new GlassButton(_theme, _effectiveButtonRadius)
             {
                 Text           = label,
                 Bounds         = new Rectangle(startX + i * (_computedBtnW + BtnGap), btnY, _computedBtnW, BtnH),
@@ -546,6 +540,7 @@ internal sealed class GlassDialog : Form
             if (i == focusIdx)
             {
                 ActiveControl = btn;
+                AcceptButton  = btn;   // #1: Enter key activates default button
                 if (_cfg.AutoCloseMs > 0) _countdownBtn = btn;
             }
         }
@@ -563,18 +558,13 @@ internal sealed class GlassDialog : Form
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-
-        // Ctrl+C — copy title + message to clipboard
         if (e.Control && e.KeyCode == Keys.C)
         {
-            var text = string.IsNullOrEmpty(_cfg.Title)
-                ? _cfg.Message
-                : $"{_cfg.Title}\n{_cfg.Message}";
+            var text = string.IsNullOrEmpty(_cfg.Title) ? _cfg.Message : $"{_cfg.Title}\n{_cfg.Message}";
             Clipboard.SetText(text);
             e.Handled = true;
             return;
         }
-
         if (e.KeyCode == Keys.Escape)
         {
             BeginClose(EscapeResult(_cfg.Buttons));
@@ -596,7 +586,15 @@ internal sealed class GlassDialog : Form
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
-        if (e.Button == MouseButtons.Left && e.Y < TitleH)
+        if (e.Button != MouseButtons.Left) return;
+
+        // #15: close button takes priority over drag
+        if (_closeBtnBounds.Contains(e.Location))
+        {
+            BeginClose(EscapeResult(_cfg.Buttons));
+            return;
+        }
+        if (e.Y < TitleH)
         {
             _dragging   = true;
             _dragOrigin = e.Location;
@@ -606,17 +604,28 @@ internal sealed class GlassDialog : Form
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        var wasHover = _closeHover;
+        _closeHover  = _closeBtnBounds.Contains(e.Location);
+        if (wasHover != _closeHover)
+            Invalidate(Rectangle.Inflate(_closeBtnBounds, 2, 2));
+
         if (_dragging)
             Location = new Point(
                 Location.X + e.X - _dragOrigin.X,
                 Location.Y + e.Y - _dragOrigin.Y);
     }
 
-    protected override void OnMouseUp(MouseEventArgs e)
+    protected override void OnMouseLeave(EventArgs e)
     {
-        base.OnMouseUp(e);
-        _dragging = false;
+        base.OnMouseLeave(e);
+        if (_closeHover)
+        {
+            _closeHover = false;
+            Invalidate(Rectangle.Inflate(_closeBtnBounds, 2, 2));
+        }
     }
+
+    protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); _dragging = false; }
 
     private void OnDetailToggleClick(object sender, LinkLabelLinkClickedEventArgs e)
     {
@@ -625,14 +634,14 @@ internal sealed class GlassDialog : Form
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Countdown timer
+    // Countdown (#9: DRY helper, #7: region-only repaint)
     // ═══════════════════════════════════════════════════════════════════════
     private void StartCountdown()
     {
         _countRemaining = _cfg.AutoCloseMs;
         UpdateCountdownLabel();
-        _countTimer          = new System.Windows.Forms.Timer { Interval = 1000 };
-        _countTimer.Tick    += OnCountdownTick;
+        _countTimer       = new System.Windows.Forms.Timer { Interval = 1000 };
+        _countTimer.Tick += OnCountdownTick;
         _countTimer.Start();
     }
 
@@ -647,45 +656,47 @@ internal sealed class GlassDialog : Form
         else
         {
             UpdateCountdownLabel();
+            InvalidateCountdownArc();  // #7: repaint only the arc, not the whole form
         }
+    }
+
+    // #7: invalidate only the countdown arc region
+    private void InvalidateCountdownArc()
+    {
+        var w    = ClientSize.Width;
+        var h    = ClientSize.Height;
+        var arcD = BtnH - Scale(6);
+        var arcX = w - Pad - arcD;
+        var arcY = h - BtnPanelH + (BtnPanelH - arcD) / 2;
+        var slop = Scale(3);
+        Invalidate(new Rectangle(arcX - slop, arcY - slop, arcD + slop * 2, arcD + slop * 2));
+        _countdownBtn?.Invalidate();
+    }
+
+    // #9: DRY — shared base-label resolution used by UpdateCountdownLabel + StopCountdown
+    private string GetDefaultButtonLabel()
+    {
+        var defs = ButtonDefs(_cfg.Buttons);
+        if (_cfg.RightToLeft) Array.Reverse(defs);
+        var idx = DefaultIndex(_cfg.Buttons, _cfg.DefaultButton);
+        if (_cfg.RightToLeft) idx = defs.Length - 1 - idx;
+        if (_cfg.CustomLabels != null && idx < _cfg.CustomLabels.Length)
+            return _cfg.CustomLabels[idx];
+        return idx < defs.Length ? defs[idx].label : string.Empty;
     }
 
     private void UpdateCountdownLabel()
     {
         if (_countdownBtn == null) return;
-        var seconds = Math.Max(0, _countRemaining / 1000);
-        var defs    = ButtonDefs(_cfg.Buttons);
-        if (_cfg.RightToLeft) Array.Reverse(defs);
-
-        var focusIdx = DefaultIndex(_cfg.Buttons, _cfg.DefaultButton);
-        if (_cfg.RightToLeft) focusIdx = defs.Length - 1 - focusIdx;
-
-        var baseLabel = defs.Length > focusIdx
-            ? defs[focusIdx].label
-            : _countdownBtn.Text.Split('(')[0].TrimEnd();
-
-        if (_cfg.CustomLabels != null && focusIdx < _cfg.CustomLabels.Length)
-            baseLabel = _cfg.CustomLabels[focusIdx];
-
-        _countdownBtn.Text = seconds > 0
-            ? $"{baseLabel} ({seconds}s)"
-            : baseLabel;
+        var seconds   = Math.Max(0, _countRemaining / 1000);
+        var baseLabel = GetDefaultButtonLabel();
+        _countdownBtn.Text = seconds > 0 ? $"{baseLabel} ({seconds}s)" : baseLabel;
     }
 
     private void StopCountdown()
     {
         if (_countdownBtn != null)
-        {
-            // restore clean label
-            var defs     = ButtonDefs(_cfg.Buttons);
-            if (_cfg.RightToLeft) Array.Reverse(defs);
-            var focusIdx = DefaultIndex(_cfg.Buttons, _cfg.DefaultButton);
-            if (_cfg.RightToLeft) focusIdx = defs.Length - 1 - focusIdx;
-            if (focusIdx < defs.Length)
-                _countdownBtn.Text = (_cfg.CustomLabels != null && focusIdx < _cfg.CustomLabels.Length)
-                    ? _cfg.CustomLabels[focusIdx]
-                    : defs[focusIdx].label;
-        }
+            _countdownBtn.Text = GetDefaultButtonLabel();
 
         if (_countTimer == null) return;
         _countTimer.Stop();
@@ -694,7 +705,7 @@ internal sealed class GlassDialog : Form
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Fade / slide animation
+    // Fade / slide / scale animation (#3 scale, #6 smoothstep)
     // ═══════════════════════════════════════════════════════════════════════
     protected override void OnLoad(EventArgs e)
     {
@@ -713,26 +724,38 @@ internal sealed class GlassDialog : Form
     {
         base.OnShown(e);
 
-        // Multi-monitor centering — target the screen that contains the owner
-        var screen = Owner != null
-            ? Screen.FromHandle(Owner.Handle)
-            : Screen.FromPoint(Cursor.Position);
-
+        var screen  = Owner != null ? Screen.FromHandle(Owner.Handle) : Screen.FromPoint(Cursor.Position);
         var wa      = screen.WorkingArea;
         var centerX = wa.Left + (wa.Width  - Width)  / 2;
         var centerY = wa.Top  + (wa.Height - Height) / 2;
-
         _slideFinal = new Point(centerX, centerY);
 
-        if (_cfg.Animation == GlassAnimation.SlideDown)
+        switch (_cfg.Animation)
         {
-            _slideOrigin = new Point(centerX, centerY - Scale(28));
-            Location     = _slideOrigin;
-            _slideActive = true;
-        }
-        else
-        {
-            Location = _slideFinal;
+            case GlassAnimation.SlideDown:
+                _slideOrigin = new Point(centerX, centerY - Scale(28));
+                Location     = _slideOrigin;
+                _slideActive = true;
+                break;
+
+            case GlassAnimation.Scale:   // #3: actual scale implementation
+                Location        = _slideFinal;
+                _scaleFinalSize = new Size(Width, Height);
+                _scaleFinalLoc  = _slideFinal;
+                _scaleActive    = true;
+                var sw0 = (int)(_scaleFinalSize.Width  * 0.90f);
+                var sh0 = (int)(_scaleFinalSize.Height * 0.90f);
+                SuspendLayout();
+                SetBounds(
+                    centerX + (_scaleFinalSize.Width  - sw0) / 2,
+                    centerY + (_scaleFinalSize.Height - sh0) / 2,
+                    sw0, sh0);
+                ResumeLayout(false);
+                break;
+
+            default:
+                Location = _slideFinal;
+                break;
         }
 
         if (_cfg.Animation != GlassAnimation.None)
@@ -745,7 +768,6 @@ internal sealed class GlassDialog : Form
     private void BeginClose(DialogResult result)
     {
         if (_fadingOut) return;
-
         StopCountdown();
         _pendingResult = result;
         _fadingOut     = true;
@@ -756,14 +778,20 @@ internal sealed class GlassDialog : Form
             return;
         }
 
-        var ratio   = _targetOpacity > 0 ? Opacity / _targetOpacity : 0.0;
-        _fadeStep   = (int)((1.0 - ratio) * _fadeTicks);
+        var ratio = _targetOpacity > 0 ? Opacity / _targetOpacity : 0.0;
+        _fadeStep = (int)((1.0 - ratio) * _fadeTicks);
 
         if (_cfg.Animation == GlassAnimation.SlideDown)
         {
             _slideOrigin = Location;
             _slideFinal  = new Point(Location.X, Location.Y + Scale(15));
             _slideActive = true;
+        }
+        else if (_cfg.Animation == GlassAnimation.Scale)
+        {
+            _scaleFinalSize = new Size(Width, Height);
+            _scaleFinalLoc  = Location;
+            _scaleActive    = true;
         }
 
         DisposeFadeTimer();
@@ -788,39 +816,69 @@ internal sealed class GlassDialog : Form
     private void OnFadeTick(object sender, EventArgs e)
     {
         _fadeStep++;
-        double ratio;
 
         if (_fadingOut)
         {
-            ratio   = Math.Max(0.0, 1.0 - (double)_fadeStep / _fadeTicks);
-            Opacity = _targetOpacity * ratio;
+            var linear = Math.Max(0.0, 1.0 - (double)_fadeStep / _fadeTicks);
+            var ratio  = Ease(linear);     // #6 smoothstep
+            Opacity    = _targetOpacity * ratio;
 
             if (_slideActive && _cfg.Animation == GlassAnimation.SlideDown)
-                Location = new Point(
-                    _slideFinal.X,
+                Location = new Point(_slideFinal.X,
                     _slideOrigin.Y + (int)((1.0 - ratio) * (_slideFinal.Y - _slideOrigin.Y)));
+
+            if (_scaleActive && _cfg.Animation == GlassAnimation.Scale)
+            {
+                var sf  = 0.90f + 0.10f * (float)ratio;
+                var nsw = (int)(_scaleFinalSize.Width  * sf);
+                var nsh = (int)(_scaleFinalSize.Height * sf);
+                SuspendLayout();
+                SetBounds(_scaleFinalLoc.X + (_scaleFinalSize.Width  - nsw) / 2,
+                          _scaleFinalLoc.Y + (_scaleFinalSize.Height - nsh) / 2, nsw, nsh);
+                ResumeLayout(false);
+            }
 
             if (_fadeStep >= _fadeTicks)
             {
                 DisposeFadeTimer();
+                _scaleActive = false;
                 DialogResult = _pendingResult;
             }
         }
         else
         {
-            ratio   = Math.Min(1.0, (double)_fadeStep / _fadeTicks);
-            Opacity = _targetOpacity * ratio;
+            var linear = Math.Min(1.0, (double)_fadeStep / _fadeTicks);
+            var ratio  = Ease(linear);     // #6 smoothstep
+            Opacity    = _targetOpacity * ratio;
 
             if (_slideActive && _cfg.Animation == GlassAnimation.SlideDown)
-                Location = new Point(
-                    _slideFinal.X,
+                Location = new Point(_slideFinal.X,
                     _slideOrigin.Y + (int)(ratio * (_slideFinal.Y - _slideOrigin.Y)));
+
+            if (_scaleActive && _cfg.Animation == GlassAnimation.Scale)
+            {
+                var sf  = 0.90f + 0.10f * (float)ratio;
+                var nsw = (int)(_scaleFinalSize.Width  * sf);
+                var nsh = (int)(_scaleFinalSize.Height * sf);
+                SuspendLayout();
+                SetBounds(_scaleFinalLoc.X + (_scaleFinalSize.Width  - nsw) / 2,
+                          _scaleFinalLoc.Y + (_scaleFinalSize.Height - nsh) / 2, nsw, nsh);
+                ResumeLayout(false);
+            }
 
             if (_fadeStep >= _fadeTicks)
             {
                 Opacity = _targetOpacity;
                 DisposeFadeTimer();
                 if (_slideActive) { Location = _slideFinal; _slideActive = false; }
+                if (_scaleActive)
+                {
+                    SuspendLayout();
+                    SetBounds(_scaleFinalLoc.X, _scaleFinalLoc.Y,
+                              _scaleFinalSize.Width, _scaleFinalSize.Height);
+                    ResumeLayout(false);
+                    _scaleActive = false;
+                }
             }
         }
     }
@@ -839,83 +897,56 @@ internal sealed class GlassDialog : Form
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Mica / Acrylic backdrop
+    // Mica / Acrylic
     // ═══════════════════════════════════════════════════════════════════════
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-
-        if (!TryApplyMica())
-            TryApplyAcrylic();
+        if (!TryApplyMica()) TryApplyAcrylic();
     }
 
     private bool TryApplyMica()
     {
-        if (!IsMicaSupported()) return false;
+        if (Environment.OSVersion.Version is var v && !(v.Major == 10 && v.Build >= 22000))
+            return false;
         try
         {
-            // Try DWMWA_SYSTEMBACKDROP_TYPE (build 22523+)
-            int v = 2; // DWMSBT_MAINWINDOW
-            if (DwmSetWindowAttribute(Handle, 38, ref v, sizeof(int)) == 0)
-            {
-                _micaEnabled   = true;
-                _targetOpacity = Math.Min(_theme.Opacity, 0.90);
-                return true;
-            }
-            // Fallback: DWMWA_MICA_EFFECT (early Win11)
-            v = 1;
-            if (DwmSetWindowAttribute(Handle, 20, ref v, sizeof(int)) == 0)
-            {
-                _micaEnabled   = true;
-                _targetOpacity = Math.Min(_theme.Opacity, 0.90);
-                return true;
-            }
+            int val = 2;
+            if (DwmSetWindowAttribute(Handle, 38, ref val, sizeof(int)) == 0)
+                { _micaEnabled = true; _targetOpacity = Math.Min(_theme.Opacity, 0.90); return true; }
+            val = 1;
+            if (DwmSetWindowAttribute(Handle, 20, ref val, sizeof(int)) == 0)
+                { _micaEnabled = true; _targetOpacity = Math.Min(_theme.Opacity, 0.90); return true; }
         }
-        catch { /* fall through to acrylic */ }
+        catch { }
         return false;
     }
 
     private void TryApplyAcrylic()
     {
-        if (!IsAcrylicSupported()) return;
+        var v = Environment.OSVersion.Version;
+        if (!(v.Major == 10 && v.Build >= 17134)) return;
         try
         {
             var c    = _theme.BackgroundTop;
             var tint = ((uint)0xC0 << 24) | ((uint)c.B << 16) | ((uint)c.G << 8) | c.R;
-
-            var accent = new AccentPolicy { AccentState = 4, GradientColor = tint };
-            var sz     = Marshal.SizeOf(typeof(AccentPolicy));
-            var ptr    = Marshal.AllocHGlobal(sz);
+            var acc  = new AccentPolicy { AccentState = 4, GradientColor = tint };
+            var sz   = Marshal.SizeOf(typeof(AccentPolicy));
+            var ptr  = Marshal.AllocHGlobal(sz);
             try
             {
-                Marshal.StructureToPtr(accent, ptr, false);
-                var data = new WindowCompositionAttribData
-                    { Attribute = 19, Data = ptr, SizeOfData = sz };
+                Marshal.StructureToPtr(acc, ptr, false);
+                var data = new WindowCompositionAttribData { Attribute = 19, Data = ptr, SizeOfData = sz };
                 if (SetWindowCompositionAttribute(Handle, ref data))
-                {
-                    _acrylicEnabled = true;
-                    _targetOpacity  = Math.Min(_theme.Opacity, 0.85);
-                }
+                    { _acrylicEnabled = true; _targetOpacity = Math.Min(_theme.Opacity, 0.85); }
             }
             finally { Marshal.FreeHGlobal(ptr); }
         }
-        catch { /* silent fallback to solid gradient */ }
-    }
-
-    private static bool IsMicaSupported()
-    {
-        var v = Environment.OSVersion.Version;
-        return v.Major == 10 && v.Build >= 22000;
-    }
-
-    private static bool IsAcrylicSupported()
-    {
-        var v = Environment.OSVersion.Version;
-        return v.Major == 10 && v.Build >= 17134;
+        catch { }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // GDI+ resource cache
+    // GDI+ cache
     // ═══════════════════════════════════════════════════════════════════════
     private void InvalidateCache()
     {
@@ -933,7 +964,7 @@ internal sealed class GlassDialog : Form
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Painting
+    // Painting (#15 close button)
     // ═══════════════════════════════════════════════════════════════════════
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -942,92 +973,119 @@ internal sealed class GlassDialog : Form
 
         var w = ClientSize.Width;
         var h = ClientSize.Height;
-        var r = _theme.CornerRadius;
+        var r = _effectiveRadius;
 
-        // ── Background ────────────────────────────────────────────────────
+        // Background
         if (!_acrylicEnabled && !_micaEnabled)
         {
             _bgPath  ??= RoundRect(new Rectangle(0, 0, w, h), r);
             _bgBrush ??= new LinearGradientBrush(new Rectangle(0, 0, w, h),
-                _theme.BackgroundTop, _theme.BackgroundBottom, LinearGradientMode.Vertical);
+                             _theme.BackgroundTop, _theme.BackgroundBottom, LinearGradientMode.Vertical);
             g.FillPath(_bgBrush, _bgPath);
         }
 
-        // ── Title bar gradient ────────────────────────────────────────────
+        // Title bar
         var titleRect = new Rectangle(0, 0, w, TitleH);
-        _titleBrush ??= new LinearGradientBrush(
-            titleRect, _theme.TitleBarTop, _theme.TitleBarBottom, LinearGradientMode.Vertical);
+        _titleBrush ??= new LinearGradientBrush(titleRect,
+                            _theme.TitleBarTop, _theme.TitleBarBottom, LinearGradientMode.Vertical);
         g.FillRectangle(_titleBrush, titleRect);
 
-        // ── Top-edge gloss ────────────────────────────────────────────────
+        // Top-edge gloss
         g.DrawLine(_glossPen, r + 1, 1, w - r - 2, 1);
 
-        // ── Title / body separator ────────────────────────────────────────
+        // Title / body separator
         g.DrawLine(_sepPen, 0, TitleH - 1, w, TitleH - 1);
 
-        // ── Border glow + crisp edge ──────────────────────────────────────
-        var borderRect = new Rectangle(0, 0, w - 1, h - 1);
-        _borderPath ??= RoundRect(borderRect, r);
+        // Button panel separator
+        g.DrawLine(_panelSepPen, Pad, h - BtnPanelH, w - Pad, h - BtnPanelH);
+
+        // Border glow + edge
+        _borderPath ??= RoundRect(new Rectangle(0, 0, w - 1, h - 1), r);
         g.DrawPath(_glowPen, _borderPath);
         g.DrawPath(_edgePen, _borderPath);
 
-        // ── Button panel separator ────────────────────────────────────────
-        var sepY = h - BtnPanelH;
-        g.DrawLine(_panelSepPen, Pad, sepY, w - Pad, sepY);
-
-        // ── Title text ────────────────────────────────────────────────────
+        // Title text — leave room for close button on correct side
         if (_cfg.Title.Length > 0)
         {
-            var titleFlags = TextFormatFlags.VerticalCenter |
-                             TextFormatFlags.SingleLine;
-            titleFlags |= _cfg.RightToLeft
+            var cb        = _closeBtnBounds;
+            var closeSz   = cb.Width + Scale(4);
+            var textLeft  = _cfg.RightToLeft ? (Pad + closeSz)   : Pad;
+            var textRight = _cfg.RightToLeft ? (w - Pad)         : (w - Pad - closeSz);
+            var flags     = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine;
+            flags |= _cfg.RightToLeft
                 ? TextFormatFlags.Right | TextFormatFlags.RightToLeft
                 : TextFormatFlags.Left;
-
             TextRenderer.DrawText(g, _cfg.Title, _theme.TitleFont,
-                new Rectangle(Pad, 0, w - Pad * 2, TitleH),
-                _theme.TitleColor, titleFlags);
+                new Rectangle(textLeft, 0, Math.Max(0, textRight - textLeft), TitleH),
+                _theme.TitleColor, flags);
         }
 
-        // ── Countdown ring (arc in button panel) ──────────────────────────
+        // #15: Close button
+        {
+            var cb = _closeBtnBounds;
+            if (_closeHover)
+            {
+                using var hoverFill = new SolidBrush(Color.FromArgb(55, 220, 50, 50));
+                g.FillEllipse(hoverFill, cb);
+            }
+            var margin = Scale(5);
+            using var xPen = new Pen(
+                Color.FromArgb(_closeHover ? 220 : 130, _theme.TitleColor),
+                Math.Max(1f, _scale * 1.2f));
+            g.DrawLine(xPen, cb.X + margin, cb.Y + margin, cb.Right - margin - 1, cb.Bottom - margin - 1);
+            g.DrawLine(xPen, cb.Right - margin - 1, cb.Y + margin, cb.X + margin, cb.Bottom - margin - 1);
+        }
+
+        // Countdown arc
         if (_cfg.AutoCloseMs > 0 && _countTimer != null)
         {
-            var ratio   = (float)_countRemaining / _cfg.AutoCloseMs;
-            var arcD    = BtnH - Scale(6);
-            var arcX    = w - Pad - arcD;
-            var arcY    = h - BtnPanelH + (BtnPanelH - arcD) / 2;
+            var ratio = (float)_countRemaining / _cfg.AutoCloseMs;
+            var arcD  = BtnH - Scale(6);
+            var arcX  = w - Pad - arcD;
+            var arcY  = h - BtnPanelH + (BtnPanelH - arcD) / 2;
             using var trackPen = new Pen(Color.FromArgb(40, _theme.BorderColor), Scale(2));
             using var fillPen  = new Pen(_theme.AccentColor, Scale(2));
             g.DrawArc(trackPen, arcX, arcY, arcD, arcD, 0, 360);
             if (ratio > 0f)
                 g.DrawArc(fillPen, arcX, arcY, arcD, arcD, -90, -(int)(360 * ratio));
         }
+
+        // Input borders
+        PaintInputBorders(g);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Helpers
-    // ═══════════════════════════════════════════════════════════════════════
-    private static Bitmap ResolveSystemIcon(MessageBoxIcon icon)
+    private void PaintInputBorders(Graphics g)
     {
-        return icon switch
+        using var borderPen = new Pen(Color.FromArgb(70, _theme.BorderColor), 1f);
+
+        if (_inputTextBox != null && !_inputTextBox.IsDisposed)
         {
-            MessageBoxIcon.Information => SystemIcons.Information.ToBitmap(),
-            MessageBoxIcon.Question    => SystemIcons.Question.ToBitmap(),
-            MessageBoxIcon.Warning     => SystemIcons.Warning.ToBitmap(),
-            MessageBoxIcon.Error       => SystemIcons.Error.ToBitmap(),
-            _                          => null,
-        };
+            var b = new Rectangle(Pad, _inputTextBox.Top - 3,
+                                   ClientSize.Width - Pad * 2, _inputTextBox.Height + 6);
+            if (_effectiveRadius > 0) { using var p = RoundRect(b, 3); g.DrawPath(borderPen, p); }
+            else g.DrawRectangle(borderPen, b);
+        }
+
+        if (_inputCombo != null && !_inputCombo.IsDisposed)
+        {
+            var b = _inputCombo.Bounds; b.Inflate(1, 1);
+            if (_effectiveRadius > 0) { using var p = RoundRect(b, 3); g.DrawPath(borderPen, p); }
+            else g.DrawRectangle(borderPen, b);
+        }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Static helpers
+    // ═══════════════════════════════════════════════════════════════════════
     private static (string label, DialogResult result)[] ButtonDefs(MessageBoxButtons btns)
     {
         return btns switch
         {
-            MessageBoxButtons.OK              => [("&OK", DialogResult.OK)],
-            MessageBoxButtons.OKCancel        => [("&OK", DialogResult.OK), ("&Cancel", DialogResult.Cancel)],
-            MessageBoxButtons.YesNo           => [("&Yes", DialogResult.Yes), ("&No", DialogResult.No)],
-            MessageBoxButtons.YesNoCancel     => [("&Yes", DialogResult.Yes), ("&No", DialogResult.No), ("&Cancel", DialogResult.Cancel)],
-            MessageBoxButtons.RetryCancel     => [("&Retry", DialogResult.Retry), ("&Cancel", DialogResult.Cancel)],
+            MessageBoxButtons.OK               => [("&OK", DialogResult.OK)],
+            MessageBoxButtons.OKCancel         => [("&OK", DialogResult.OK), ("&Cancel", DialogResult.Cancel)],
+            MessageBoxButtons.YesNo            => [("&Yes", DialogResult.Yes), ("&No", DialogResult.No)],
+            MessageBoxButtons.YesNoCancel      => [("&Yes", DialogResult.Yes), ("&No", DialogResult.No), ("&Cancel", DialogResult.Cancel)],
+            MessageBoxButtons.RetryCancel      => [("&Retry", DialogResult.Retry), ("&Cancel", DialogResult.Cancel)],
             MessageBoxButtons.AbortRetryIgnore => [("&Abort", DialogResult.Abort), ("&Retry", DialogResult.Retry), ("&Ignore", DialogResult.Ignore)],
             _                                  => [("&OK", DialogResult.OK)],
         };
@@ -1047,23 +1105,19 @@ internal sealed class GlassDialog : Form
     private static DialogResult DefaultResult(MessageBoxButtons btns, MessageBoxDefaultButton def)
     {
         var defs = ButtonDefs(btns);
-        var idx  = Math.Min(DefaultIndex(btns, def), defs.Length - 1);
-        return defs[idx].result;
+        return defs[Math.Min(DefaultIndex(btns, def), defs.Length - 1)].result;
     }
 
-    private static DialogResult EscapeResult(MessageBoxButtons btns)
+    private static DialogResult EscapeResult(MessageBoxButtons btns) => btns switch
     {
-        return btns switch
-        {
-            MessageBoxButtons.OK               => DialogResult.OK,
-            MessageBoxButtons.OKCancel         => DialogResult.Cancel,
-            MessageBoxButtons.YesNo            => DialogResult.No,
-            MessageBoxButtons.YesNoCancel      => DialogResult.Cancel,
-            MessageBoxButtons.RetryCancel      => DialogResult.Cancel,
-            MessageBoxButtons.AbortRetryIgnore => DialogResult.Ignore,
-            _                                  => DialogResult.Cancel,
-        };
-    }
+        MessageBoxButtons.OK               => DialogResult.OK,
+        MessageBoxButtons.OKCancel         => DialogResult.Cancel,
+        MessageBoxButtons.YesNo            => DialogResult.No,
+        MessageBoxButtons.YesNoCancel      => DialogResult.Cancel,
+        MessageBoxButtons.RetryCancel      => DialogResult.Cancel,
+        MessageBoxButtons.AbortRetryIgnore => DialogResult.Ignore,
+        _                                  => DialogResult.Cancel,
+    };
 
     internal static void SetQuality(Graphics g)
     {
@@ -1075,61 +1129,52 @@ internal sealed class GlassDialog : Form
         g.TextRenderingHint  = TextRenderingHint.ClearTypeGridFit;
     }
 
+    /// <summary>
+    /// Rectangle path with corner radius. radius ≤ 0 returns a plain rectangle path
+    /// (pixel-perfect sharp corners, no arc artefacts).
+    /// </summary>
     internal static GraphicsPath RoundRect(Rectangle rect, int radius)
     {
         var path = new GraphicsPath();
-        var d    = Math.Max(1, radius * 2);
-        path.AddArc(rect.Left,          rect.Top,          d, d, 180, 90);
-        path.AddArc(rect.Right - d,     rect.Top,          d, d, 270, 90);
-        path.AddArc(rect.Right - d,     rect.Bottom - d,   d, d,   0, 90);
-        path.AddArc(rect.Left,          rect.Bottom - d,   d, d,  90, 90);
+        if (radius <= 0) { path.AddRectangle(rect); return path; }
+        var d = radius * 2;
+        path.AddArc(rect.Left,      rect.Top,          d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Top,          d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d,   d, d,   0, 90);
+        path.AddArc(rect.Left,      rect.Bottom - d,   d, d,  90, 90);
         path.CloseFigure();
         return path;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Nested: themed progress bar panel
+    // Nested: animated progress bar
     // ═══════════════════════════════════════════════════════════════════════
     private sealed class GlassProgressPanel : Control
     {
         private readonly GlassTheme _theme;
-        private readonly int  _value;  // -1 = indeterminate, 0..max = determinate
-        private readonly int  _max;
-        private float         _phase; // continuously increasing angle (radians)
+        private readonly int _value, _max;
+        private float _phase;
         private System.Windows.Forms.Timer _ticker;
-        private GraphicsPath  _trackPath;
-        private Size          _trackSize;
+        private GraphicsPath _trackPath;
+        private Size         _trackSize;
 
         public GlassProgressPanel(GlassTheme theme, int value, int max)
         {
             _theme = theme;
             _value = value;
             _max   = Math.Max(1, max);
-
             SetStyle(ControlStyles.OptimizedDoubleBuffer |
                      ControlStyles.AllPaintingInWmPaint  |
                      ControlStyles.UserPaint, true);
-
             if (_value == -1)
             {
-                // 16 ms ≈ 60 fps; 0.045 rad/tick → full back-and-forth in ~2.2 s
                 _ticker = new System.Windows.Forms.Timer { Interval = 16 };
-                _ticker.Tick += (s, e) =>
-                {
-                    _phase = (_phase + 0.045f) % (float)(Math.PI * 2.0);
-                    Invalidate();
-                };
+                _ticker.Tick += (s, e) => { _phase = (_phase + 0.045f) % (float)(Math.PI * 2.0); Invalidate(); };
                 _ticker.Start();
             }
         }
 
-        protected override void OnResize(EventArgs e)
-        {
-            _trackPath?.Dispose();
-            _trackPath = null;
-            base.OnResize(e);
-            Invalidate();
-        }
+        protected override void OnResize(EventArgs e) { _trackPath?.Dispose(); _trackPath = null; base.OnResize(e); Invalidate(); }
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -1138,7 +1183,6 @@ internal sealed class GlassDialog : Form
             var rect = new Rectangle(0, 0, Width - 1, Height - 1);
             var r    = Height / 2;
 
-            // Track (cached — no GDI+ alloc per frame)
             if (_trackPath == null || _trackSize != Size)
             {
                 _trackPath?.Dispose();
@@ -1149,77 +1193,57 @@ internal sealed class GlassDialog : Form
             using (var bgBrush = new SolidBrush(Color.FromArgb(30, _theme.AccentColor)))
                 g.FillPath(bgBrush, _trackPath);
 
-            if (_value == -1) // ── Indeterminate ────────────────────────────
+            if (_value == -1)
             {
                 var t     = (float)((1.0 + Math.Sin(_phase - Math.PI / 2.0)) / 2.0);
                 var fw    = Math.Max(Height * 2, Width / 3);
                 var fx    = (int)(t * (Width - fw));
                 var fRect = new Rectangle(fx, 0, fw, Height - 1);
-
                 if (fRect.Width > 0)
                 {
                     using var fp = RoundRect(fRect, r);
                     using var fb = new LinearGradientBrush(
-                        new Rectangle(fRect.X, fRect.Y,
-                                      Math.Max(1, fRect.Width),
-                                      Math.Max(1, fRect.Height)),
-                        Color.FromArgb(80, _theme.AccentColor),
-                        _theme.AccentColor,
-                        LinearGradientMode.Horizontal);
+                        new Rectangle(fRect.X, fRect.Y, Math.Max(1, fRect.Width), Math.Max(1, fRect.Height)),
+                        Color.FromArgb(80, _theme.AccentColor), _theme.AccentColor, LinearGradientMode.Horizontal);
                     fb.SetBlendTriangularShape(0.5f, 1.0f);
-                    g.SetClip(_trackPath);
-                    g.FillPath(fb, fp);
-                    g.ResetClip();
+                    g.SetClip(_trackPath); g.FillPath(fb, fp); g.ResetClip();
                 }
             }
-            else // ── Determinate ───────────────────────────────────────────
+            else
             {
                 var fw    = Math.Max(r * 2, (int)((float)_value / _max * (Width - 1)));
                 var fRect = new Rectangle(0, 0, fw, Height - 1);
                 if (fRect.Width > 0)
                 {
                     using var fp = RoundRect(fRect, r);
-                    using var fb = new LinearGradientBrush(fRect,
-                        _theme.AccentColor, _theme.BorderColor, 0f);
-                    g.SetClip(_trackPath);
-                    g.FillPath(fb, fp);
-
-                    // Top-half shine highlight
+                    using var fb = new LinearGradientBrush(fRect, _theme.AccentColor, _theme.BorderColor, 0f);
+                    g.SetClip(_trackPath); g.FillPath(fb, fp);
                     if (fw > 4)
                     {
-                        var shineH    = Math.Max(1, (Height - 1) / 2);
-                        var shineRect = new Rectangle(0, 0, fw, shineH);
+                        var sh = Math.Max(1, (Height - 1) / 2);
                         using var shine = new LinearGradientBrush(
-                            new Rectangle(0, 0, Math.Max(1, fw), Math.Max(1, shineH)),
-                            Color.FromArgb(70, 255, 255, 255),
-                            Color.FromArgb(0,  255, 255, 255),
+                            new Rectangle(0, 0, Math.Max(1, fw), Math.Max(1, sh)),
+                            Color.FromArgb(70, 255, 255, 255), Color.FromArgb(0, 255, 255, 255),
                             LinearGradientMode.Vertical);
-                        g.FillRectangle(shine, shineRect);
+                        g.FillRectangle(shine, 0, 0, fw, sh);
                     }
                     g.ResetClip();
                 }
             }
 
-            // Border
             using var pen = new Pen(Color.FromArgb(70, _theme.BorderColor), 1f);
             g.DrawPath(pen, _trackPath);
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing)
-            {
-                _ticker?.Stop();
-                _ticker?.Dispose();
-                _trackPath?.Dispose();
-            }
+            if (disposing) { _ticker?.Stop(); _ticker?.Dispose(); _trackPath?.Dispose(); }
             base.Dispose(disposing);
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Nested: TextBox with placeholder via Win32 EM_SETCUEBANNER
-    // (works on .NET Framework 4.8.1 and .NET 8 identically)
+    // Nested: TextBox with EM_SETCUEBANNER placeholder
     // ═══════════════════════════════════════════════════════════════════════
     private sealed class PlaceholderTextBox : TextBox
     {
@@ -1243,10 +1267,8 @@ internal sealed class GlassDialog : Form
         {
             DisposeFadeTimer();
             StopCountdown();
-
-            if (_cfg.CustomIcon == null) _iconBitmap?.Dispose();
+            _detailFont?.Dispose();
             InvalidateCache();
-
             _glossPen?.Dispose();
             _sepPen?.Dispose();
             _glowPen?.Dispose();

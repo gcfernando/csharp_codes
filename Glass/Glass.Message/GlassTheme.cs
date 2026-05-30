@@ -1,105 +1,111 @@
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
 namespace Glass;
 
-/// <summary>Visual style settings for a <see cref="GlassMessage"/> dialog.</summary>
-public sealed class GlassTheme
+/// <summary>
+/// Visual style settings for a <see cref="GlassMessage"/> dialog.
+/// Implements <see cref="IDisposable"/> — call <see cref="Dispose"/> when you
+/// are done with a custom theme to free its GDI Font handles.
+/// <b>Do not dispose the built-in static presets</b> (<see cref="Default"/>,
+/// <see cref="Light"/>, <see cref="Mica"/>, etc.) — they are protected.
+/// </summary>
+public sealed class GlassTheme : IDisposable
 {
     // ── Background ────────────────────────────────────────────────────────
-    /// <summary>Top colour of the body gradient.</summary>
     public Color BackgroundTop    { get; set; } = Color.FromArgb(15, 23, 42);
-    /// <summary>Bottom colour of the body gradient.</summary>
     public Color BackgroundBottom { get; set; } = Color.FromArgb(7, 11, 22);
 
     // ── Title bar ─────────────────────────────────────────────────────────
-    /// <summary>Top colour of the title-bar gradient.</summary>
-    public Color TitleBarTop      { get; set; } = Color.FromArgb(22, 40, 68);
-    /// <summary>Bottom colour of the title-bar gradient.</summary>
-    public Color TitleBarBottom   { get; set; } = Color.FromArgb(13, 24, 42);
+    public Color TitleBarTop    { get; set; } = Color.FromArgb(22, 40, 68);
+    public Color TitleBarBottom { get; set; } = Color.FromArgb(13, 24, 42);
 
     // ── Accent & border ───────────────────────────────────────────────────
-    /// <summary>Glow border colour.</summary>
-    public Color BorderColor      { get; set; } = Color.FromArgb(56, 189, 248);
-    /// <summary>Interactive accent colour (focus rings, links, countdown arc).</summary>
-    public Color AccentColor      { get; set; } = Color.FromArgb(14, 165, 233);
+    public Color BorderColor { get; set; } = Color.FromArgb(56, 189, 248);
+    public Color AccentColor { get; set; } = Color.FromArgb(14, 165, 233);
 
     // ── Text ──────────────────────────────────────────────────────────────
-    /// <summary>Title text colour.</summary>
-    public Color TitleColor       { get; set; } = Color.FromArgb(186, 230, 253);
-    /// <summary>Message body text colour.</summary>
-    public Color MessageColor     { get; set; } = Color.FromArgb(203, 213, 225);
+    public Color TitleColor   { get; set; } = Color.FromArgb(200, 235, 255);
+    public Color MessageColor { get; set; } = Color.FromArgb(210, 220, 235);
 
     // ── Buttons ───────────────────────────────────────────────────────────
-    /// <summary>Button label colour.</summary>
     public Color ButtonForeColor  { get; set; } = Color.FromArgb(224, 242, 254);
-    /// <summary>Top fill colour for the button gradient (resting state).</summary>
-    public Color ButtonFillTop    { get; set; } = Color.FromArgb(18, 38, 68);
-    /// <summary>Bottom fill colour for the button gradient (resting state).</summary>
-    public Color ButtonFillBottom { get; set; } = Color.FromArgb(10, 22, 42);
+    public Color ButtonFillTop    { get; set; } = Color.FromArgb(20, 40, 72);
+    public Color ButtonFillBottom { get; set; } = Color.FromArgb(11, 24, 46);
 
     // ── Controls ──────────────────────────────────────────────────────────
-    /// <summary>Checkbox/toggle accent colour.</summary>
-    public Color CheckBoxColor    { get; set; } = Color.FromArgb(56, 189, 248);
-    /// <summary>Background colour for text input fields.</summary>
-    public Color InputBackColor   { get; set; } = Color.FromArgb(14, 22, 40);
-    /// <summary>Text colour for text input fields.</summary>
-    public Color InputForeColor   { get; set; } = Color.FromArgb(203, 213, 225);
+    public Color CheckBoxColor  { get; set; } = Color.FromArgb(56, 189, 248);
+    public Color InputBackColor { get; set; } = Color.FromArgb(12, 20, 38);
+    public Color InputForeColor { get; set; } = Color.FromArgb(210, 220, 235);
 
     // ── Shape ─────────────────────────────────────────────────────────────
-    /// <summary>Corner radius of the dialog window in pixels (at 96 DPI).</summary>
+    /// <summary>Dialog corner radius when rounded corners are enabled (96 DPI pixels).</summary>
     public int CornerRadius       { get; set; } = 8;
-    /// <summary>Corner radius of each button in pixels (at 96 DPI).</summary>
+    /// <summary>Button corner radius when rounded corners are enabled (96 DPI pixels).</summary>
     public int ButtonCornerRadius { get; set; } = 5;
 
     // ── Typography ────────────────────────────────────────────────────────
-    /// <summary>Font used for the dialog title.</summary>
     public Font TitleFont   { get; set; } = new Font("Segoe UI", 11f,   FontStyle.Bold,    GraphicsUnit.Point);
-    /// <summary>Font used for the message body.</summary>
     public Font MessageFont { get; set; } = new Font("Segoe UI", 10.5f, FontStyle.Regular, GraphicsUnit.Point);
-    /// <summary>Font used for button labels.</summary>
-    public Font ButtonFont  { get; set; } = new Font("Segoe UI", 9.5f,  FontStyle.Regular, GraphicsUnit.Point);
+    public Font ButtonFont  { get; set; } = new Font("Segoe UI", 10f,   FontStyle.Regular, GraphicsUnit.Point);
 
     // ── Window ────────────────────────────────────────────────────────────
-    /// <summary>Target window opacity (0.0 – 1.0).</summary>
     public double Opacity { get; set; } = 0.97;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Built-in presets
+    // IDisposable — disposes the three Font GDI handles
+    // ═══════════════════════════════════════════════════════════════════════
+    private bool _disposed;
+
+    // Preset guard: static presets set this flag so Dispose() is a no-op.
+    private bool _isPreset;
+
+    public void Dispose()
+    {
+        if (_disposed || _isPreset) return;
+        _disposed = true;
+        TitleFont?.Dispose();
+        MessageFont?.Dispose();
+        ButtonFont?.Dispose();
+    }
+
+    // ── Preset factory helper (marks the instance as protected) ───────────
+    private static GlassTheme Preset(GlassTheme t) { t._isPreset = true; return t; }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Built-in presets — safe to use indefinitely; never dispose these.
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// <summary>Original deep midnight-blue dark theme (backward-compatible default).</summary>
-    public static GlassTheme Default { get; } = new GlassTheme();
+    /// <summary>Deep midnight-blue dark theme (default).</summary>
+    public static GlassTheme Default { get; } = Preset(new GlassTheme());
 
     /// <summary>Explicit dark theme — same palette as <see cref="Default"/>.</summary>
-    public static GlassTheme Dark { get; } = new GlassTheme();
+    public static GlassTheme Dark { get; } = Preset(new GlassTheme());
 
     /// <summary>Clean light theme for bright-mode environments.</summary>
-    public static GlassTheme Light { get; } = new GlassTheme
+    public static GlassTheme Light { get; } = Preset(new GlassTheme
     {
         BackgroundTop    = Color.FromArgb(245, 248, 255),
-        BackgroundBottom = Color.FromArgb(232, 238, 252),
+        BackgroundBottom = Color.FromArgb(230, 238, 252),
         TitleBarTop      = Color.FromArgb(215, 228, 252),
-        TitleBarBottom   = Color.FromArgb(200, 216, 248),
+        TitleBarBottom   = Color.FromArgb(198, 216, 248),
         BorderColor      = Color.FromArgb(0,   120, 212),
         AccentColor      = Color.FromArgb(0,    90, 180),
-        TitleColor       = Color.FromArgb(16,   24,  48),
-        MessageColor     = Color.FromArgb(30,   40,  60),
-        ButtonForeColor  = Color.FromArgb(16,   24,  48),
+        TitleColor       = Color.FromArgb(12,   20,  44),
+        MessageColor     = Color.FromArgb(28,   38,  58),
+        ButtonForeColor  = Color.FromArgb(12,   20,  44),
         ButtonFillTop    = Color.FromArgb(200,  220, 250),
-        ButtonFillBottom = Color.FromArgb(175,  205, 242),
+        ButtonFillBottom = Color.FromArgb(172,  204, 242),
         CheckBoxColor    = Color.FromArgb(0,    120, 212),
         InputBackColor   = Color.FromArgb(255,  255, 255),
         InputForeColor   = Color.FromArgb(16,   24,  48),
         Opacity = 0.98,
-    };
+    });
 
-    /// <summary>
-    /// Windows 11 Mica-inspired theme with a cooler, more desaturated palette.
-    /// The DWM Mica / Acrylic backdrop is applied automatically when supported.
-    /// </summary>
-    public static GlassTheme Mica { get; } = new GlassTheme
+    /// <summary>Windows 11 Mica-inspired theme. DWM backdrop applied automatically when supported.</summary>
+    public static GlassTheme Mica { get; } = Preset(new GlassTheme
     {
         BackgroundTop    = Color.FromArgb(24, 24, 36),
         BackgroundBottom = Color.FromArgb(14, 14, 24),
@@ -107,25 +113,22 @@ public sealed class GlassTheme
         TitleBarBottom   = Color.FromArgb(20, 22, 40),
         BorderColor      = Color.FromArgb(90,  110, 200),
         AccentColor      = Color.FromArgb(60,  100, 220),
-        TitleColor       = Color.FromArgb(200, 210, 240),
-        MessageColor     = Color.FromArgb(180, 190, 220),
+        TitleColor       = Color.FromArgb(205, 215, 245),
+        MessageColor     = Color.FromArgb(182, 192, 222),
         ButtonForeColor  = Color.FromArgb(210, 220, 250),
         ButtonFillTop    = Color.FromArgb(32,  42,  78),
         ButtonFillBottom = Color.FromArgb(18,  26,  54),
         CheckBoxColor    = Color.FromArgb(90,  120, 220),
         InputBackColor   = Color.FromArgb(18,  20,  36),
-        InputForeColor   = Color.FromArgb(180, 190, 220),
+        InputForeColor   = Color.FromArgb(182, 192, 222),
         Opacity = 0.88,
-    };
+    });
 
-    /// <summary>
-    /// Windows High Contrast theme using <see cref="SystemColors"/> exclusively.
-    /// Automatically selected by <see cref="AutoDetect"/> when High Contrast is active.
-    /// </summary>
+    /// <summary>High Contrast theme using <see cref="SystemColors"/>. Auto-selected by <see cref="AutoDetect"/>.</summary>
     public static GlassTheme HighContrast { get; } = BuildHighContrast();
 
-    /// <summary>Classic Windows "gray" system-chrome look (no rounded corners).</summary>
-    public static GlassTheme WindowsClassic { get; } = new GlassTheme
+    /// <summary>Classic Windows "gray" system-chrome look (sharp rectangular corners).</summary>
+    public static GlassTheme WindowsClassic { get; } = Preset(new GlassTheme
     {
         BackgroundTop    = SystemColors.Control,
         BackgroundBottom = SystemColors.ControlDark,
@@ -144,27 +147,20 @@ public sealed class GlassTheme
         CornerRadius       = 0,
         ButtonCornerRadius = 0,
         Opacity = 1.0,
-    };
+    });
 
     // ═══════════════════════════════════════════════════════════════════════
     // Auto-detection
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Returns the preset that best matches the current Windows appearance settings:
-    /// <see cref="HighContrast"/> → <see cref="Dark"/> → <see cref="Light"/>.
-    /// Falls back to <see cref="Default"/> on older OS versions.
-    /// </summary>
+    /// <summary>Returns the preset best matching current Windows appearance (HighContrast → Dark → Light).</summary>
     public static GlassTheme AutoDetect()
     {
         if (SystemInformation.HighContrast) return HighContrast;
         return IsSystemDark() ? Dark : Light;
     }
 
-    /// <summary>
-    /// Returns <c>true</c> when Windows is configured to use a dark app theme
-    /// (<c>HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme = 0</c>).
-    /// </summary>
+    /// <summary>Returns <c>true</c> when Windows is in dark app mode.</summary>
     public static bool IsSystemDark()
     {
         try
@@ -176,9 +172,7 @@ public sealed class GlassTheme
         catch { return true; }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    private static GlassTheme BuildHighContrast() => new GlassTheme
+    private static GlassTheme BuildHighContrast() => Preset(new GlassTheme
     {
         BackgroundTop    = SystemColors.Window,
         BackgroundBottom = SystemColors.Window,
@@ -197,5 +191,5 @@ public sealed class GlassTheme
         CornerRadius       = 0,
         ButtonCornerRadius = 0,
         Opacity = 1.0,
-    };
+    });
 }

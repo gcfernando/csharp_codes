@@ -4,36 +4,20 @@ using System.Windows.Forms;
 
 namespace Glass;
 
-// ─────────────────────────────────────────────────────────────────────────
-// GlassBuilder — fluent API.  Chain options then call .Show() or .ShowEx().
-// ─────────────────────────────────────────────────────────────────────────
-
 /// <summary>Fluent builder for <see cref="GlassMessage"/> dialogs.</summary>
-/// <example><code>
-/// var result = GlassMessage.Create("Delete 12 files?")
-///     .Title("Confirm")
-///     .Icon(MessageBoxIcon.Warning)
-///     .Buttons("Delete", "Cancel")
-///     .CheckBox("Don't ask again")
-///     .AutoClose(10_000)
-///     .ShowEx();
-///
-/// if (result.Button == DialogResult.OK &amp;&amp; result.CheckBoxChecked)
-///     SuppressFutureWarnings();
-/// </code></example>
 public sealed class GlassBuilder
 {
     private readonly string _message;
 
     // ── Core ──────────────────────────────────────────────────────────────
-    private string                 _title         = string.Empty;
-    private MessageBoxIcon         _icon          = MessageBoxIcon.None;
-    private Bitmap                 _customIcon;
-    private MessageBoxButtons      _buttons       = MessageBoxButtons.OK;
+    private string                  _title         = string.Empty;
+    private MessageBoxIcon          _icon          = MessageBoxIcon.None;
+    private Bitmap                  _customIcon;
+    private MessageBoxButtons       _buttons       = MessageBoxButtons.OK;
     private MessageBoxDefaultButton _defaultButton = MessageBoxDefaultButton.Button1;
-    private GlassTheme             _theme;
-    private IWin32Window           _owner;
-    private string[]               _customLabels;
+    private GlassTheme              _theme;
+    private IWin32Window            _owner;
+    private string[]                _customLabels;
 
     // ── Animation ─────────────────────────────────────────────────────────
     private GlassAnimation _animation = GlassAnimation.Fade;
@@ -62,39 +46,28 @@ public sealed class GlassBuilder
     // ── Layout ────────────────────────────────────────────────────────────
     private bool _rightToLeft;
 
+    // ── Shape — null means "inherit from GlassMessage.UseRoundedCorners" ──
+    private bool? _roundedCorners;
+
     // ═══════════════════════════════════════════════════════════════════════
     // Constructor
     // ═══════════════════════════════════════════════════════════════════════
     internal GlassBuilder(string message) => _message = message ?? string.Empty;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Core chainable methods  (all return `this` for chaining)
+    // Chainable methods
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// <summary>Sets the window title.</summary>
-    public GlassBuilder Title(string title)     { _title = title ?? string.Empty; return this; }
-
-    /// <summary>Sets one of the standard system icons.</summary>
-    public GlassBuilder Icon(MessageBoxIcon i)  { _icon = i; _customIcon = null; return this; }
-
-    /// <summary>Sets a custom bitmap icon (overrides <see cref="Icon(MessageBoxIcon)"/>).</summary>
-    public GlassBuilder Icon(Bitmap bitmap)     { _customIcon = bitmap; return this; }
-
-    /// <summary>Sets the default focused button.</summary>
+    public GlassBuilder Title(string title)      { _title = title ?? string.Empty; return this; }
+    public GlassBuilder Icon(MessageBoxIcon i)   { _icon = i; _customIcon = null; return this; }
+    public GlassBuilder Icon(Bitmap bitmap)      { _customIcon = bitmap; return this; }
     public GlassBuilder Default(MessageBoxDefaultButton d) { _defaultButton = d; return this; }
-
-    /// <summary>Sets the visual theme for this dialog only.</summary>
-    public GlassBuilder Theme(GlassTheme t)    { _theme = t; return this; }
-
-    /// <summary>Sets the owner window (for modality and multi-monitor centering).</summary>
-    public GlassBuilder Owner(IWin32Window o)  { _owner = o; return this; }
-
-    /// <summary>Sets the entrance/exit animation style.</summary>
+    public GlassBuilder Theme(GlassTheme t)      { _theme = t; return this; }
+    public GlassBuilder Owner(IWin32Window o)    { _owner = o; return this; }
     public GlassBuilder Animation(GlassAnimation a) { _animation = a; return this; }
 
     // ── Buttons ───────────────────────────────────────────────────────────
 
-    /// <summary>Sets a standard button combination.</summary>
     public GlassBuilder Buttons(MessageBoxButtons buttons)
     {
         _buttons      = buttons;
@@ -107,6 +80,7 @@ public sealed class GlassBuilder
     /// </summary>
     public GlassBuilder Buttons(params string[] labels)
     {
+        if (labels == null || labels.Length == 0) return this;
         _customLabels = labels;
         _buttons = labels.Length switch
         {
@@ -117,25 +91,24 @@ public sealed class GlassBuilder
         return this;
     }
 
-    // ── Auto-close countdown ──────────────────────────────────────────────
+    // ── Shape ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Auto-dismisses the dialog after <paramref name="milliseconds"/> ms,
-    /// clicking the default button.  Shows a live countdown on the button label
-    /// and a ring arc in the button panel.
+    /// Enables or disables rounded corners for this dialog.
+    /// When not called, <see cref="GlassMessage.UseRoundedCorners"/> is used.
     /// </summary>
-    public GlassBuilder AutoClose(int milliseconds)
+    public GlassBuilder RoundedCorners(bool enable = true)
     {
-        _autoCloseMs = milliseconds;
+        _roundedCorners = enable;
         return this;
     }
 
+    // ── Auto-close ────────────────────────────────────────────────────────
+
+    public GlassBuilder AutoClose(int milliseconds) { _autoCloseMs = milliseconds; return this; }
+
     // ── Checkbox ──────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Adds a "Don't show again" checkbox (or any label you choose).
-    /// Read the result via <see cref="GlassResult.CheckBoxChecked"/> from <see cref="ShowEx"/>.
-    /// </summary>
     public GlassBuilder CheckBox(string label, bool defaultChecked = false)
     {
         _checkBoxLabel   = label;
@@ -145,7 +118,6 @@ public sealed class GlassBuilder
 
     // ── Inline input ──────────────────────────────────────────────────────
 
-    /// <summary>Adds a single-line text input field.</summary>
     public GlassBuilder InputText(string placeholder = "", string defaultValue = "")
     {
         _inputMode        = GlassInputMode.Text;
@@ -154,7 +126,6 @@ public sealed class GlassBuilder
         return this;
     }
 
-    /// <summary>Adds a password field (characters are masked).</summary>
     public GlassBuilder InputPassword(string placeholder = "")
     {
         _inputMode        = GlassInputMode.Password;
@@ -162,7 +133,6 @@ public sealed class GlassBuilder
         return this;
     }
 
-    /// <summary>Adds a multi-line text area.</summary>
     public GlassBuilder InputMultiline(string placeholder = "", string defaultValue = "")
     {
         _inputMode        = GlassInputMode.Multiline;
@@ -171,7 +141,6 @@ public sealed class GlassBuilder
         return this;
     }
 
-    /// <summary>Adds a drop-down combo box with <paramref name="items"/>.</summary>
     public GlassBuilder InputDropdown(IEnumerable<string> items, string defaultItem = null)
     {
         _inputMode          = GlassInputMode.Dropdown;
@@ -182,19 +151,10 @@ public sealed class GlassBuilder
 
     // ── Expandable detail ─────────────────────────────────────────────────
 
-    /// <summary>
-    /// Adds a collapsible "Show details ▼" section containing <paramref name="detail"/>.
-    /// Ideal for stack traces, verbose logs, or extended diagnostics.
-    /// </summary>
-    public GlassBuilder Detail(string detail)
-    {
-        _detailText = detail;
-        return this;
-    }
+    public GlassBuilder Detail(string detail) { _detailText = detail; return this; }
 
     // ── Progress bar ──────────────────────────────────────────────────────
 
-    /// <summary>Adds an indeterminate (marquee) progress bar.</summary>
     public GlassBuilder ProgressIndeterminate()
     {
         _showProgress  = true;
@@ -202,10 +162,6 @@ public sealed class GlassBuilder
         return this;
     }
 
-    /// <summary>
-    /// Adds a determinate progress bar.
-    /// <paramref name="value"/> must be between 0 and <paramref name="max"/>.
-    /// </summary>
     public GlassBuilder Progress(int value, int max = 100)
     {
         _showProgress  = true;
@@ -216,28 +172,14 @@ public sealed class GlassBuilder
 
     // ── Layout ────────────────────────────────────────────────────────────
 
-    /// <summary>Mirrors the dialog layout for right-to-left languages (Arabic, Hebrew, etc.).</summary>
-    public GlassBuilder RightToLeft(bool enable = true)
-    {
-        _rightToLeft = enable;
-        return this;
-    }
+    public GlassBuilder RightToLeft(bool enable = true) { _rightToLeft = enable; return this; }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Show methods
+    // Terminal methods
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Shows the dialog and returns the standard <see cref="DialogResult"/>.
-    /// Use <see cref="ShowEx"/> when you also need checkbox or input results.
-    /// </summary>
-    public DialogResult Show() => GlassMessage.CoreEx(_owner, BuildConfig()).Button;
-
-    /// <summary>
-    /// Shows the dialog and returns a rich <see cref="GlassResult"/> that includes
-    /// the button pressed, checkbox state, and any input text.
-    /// </summary>
-    public GlassResult ShowEx() => GlassMessage.CoreEx(_owner, BuildConfig());
+    public DialogResult Show()   => GlassMessage.CoreEx(_owner, BuildConfig()).Button;
+    public GlassResult  ShowEx() => GlassMessage.CoreEx(_owner, BuildConfig());
 
     // ═══════════════════════════════════════════════════════════════════════
     // Config assembly
@@ -265,5 +207,7 @@ public sealed class GlassBuilder
         ProgressValue      = _progressValue,
         ProgressMax        = _progressMax,
         RightToLeft        = _rightToLeft,
+        // null means "inherit from GlassMessage.UseRoundedCorners" at dialog construction time
+        UseRoundedCorners  = _roundedCorners,
     };
 }
