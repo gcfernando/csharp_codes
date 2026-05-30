@@ -26,7 +26,7 @@ internal sealed class GlassDialog : Form
     private const int _minFormWBase  = 360;
     private const int _minFormHBase  = 164;
     private const int _progressHBase = 10;
-    private const int _inputHBase    = 34;
+    private const int _inputHBase    = 40;
     private const int _inputMLHBase  = 80;
     private const int _checkHBase    = 24;
     private const int _linkHBase     = 22;
@@ -81,6 +81,7 @@ internal sealed class GlassDialog : Form
     // ── Controls ──────────────────────────────────────────────────────────
     private CheckBox    _checkBoxCtrl;
     private TextBox     _inputTextBox;
+    private Rectangle   _inputBandRect;   // full visual box for the single/multiline input border
     private ComboBox    _inputCombo;
     private LinkLabel   _detailToggle;
     private GlassButton _countdownBtn;
@@ -294,9 +295,10 @@ internal sealed class GlassDialog : Form
             c.Dispose();
         }
         Controls.Clear();
-        _inputTextBox = null;
-        _inputCombo   = null;
-        _checkBoxCtrl = null;
+        _inputTextBox  = null;
+        _inputBandRect = Rectangle.Empty;
+        _inputCombo    = null;
+        _checkBoxCtrl  = null;
         _detailToggle = null;
         _countdownBtn = null;
         _countdownBaseLabel = string.Empty;
@@ -454,7 +456,10 @@ internal sealed class GlassDialog : Form
                 UseMnemonic                = false,
                 UseCompatibleTextRendering = false,
                 Bounds                     = new Rectangle(_msgLeft, y, _msgW, _contentH),
-                TextAlign                  = _cfg.RightToLeft ? ContentAlignment.TopRight : ContentAlignment.TopLeft,
+                // A Label inherits the form's RightToLeft=Yes and MIRRORS ContentAlignment, so
+                // TopLeft renders right-aligned under RTL (and left-aligned under LTR) — exactly
+                // what we want. Setting TopRight here would mirror to the left (the reported bug).
+                TextAlign                  = ContentAlignment.TopLeft,
                 AccessibleRole             = AccessibleRole.StaticText,
             });
         }
@@ -503,8 +508,11 @@ internal sealed class GlassDialog : Form
             else
             {
                 var multiline = _cfg.InputMode == GlassInputMode.Multiline;
+                var password  = _cfg.InputMode == GlassInputMode.Password;
                 var inputH2   = multiline ? InputMLH : InputH;
-                var boxW      = fw - Pad * 2 - 6;
+                _inputBandRect = new Rectangle(Pad, y, fw - Pad * 2, inputH2);   // full visual box
+                var eyeSize   = password ? inputH2 : 0;                          // reveal-toggle column
+
                 _inputTextBox = new PlaceholderTextBox(_cfg.InputPlaceholder ?? string.Empty)
                 {
                     Font           = _theme.MessageFont,
@@ -513,24 +521,43 @@ internal sealed class GlassDialog : Form
                     BorderStyle    = BorderStyle.None,
                     Multiline      = multiline,
                     ScrollBars     = multiline ? ScrollBars.Vertical : ScrollBars.None,
-                    PasswordChar   = _cfg.InputMode == GlassInputMode.Password ? '●' : '\0',
+                    PasswordChar   = password ? '●' : '\0',
                     Text           = _cfg.InputDefault ?? string.Empty,
                     TextAlign      = _cfg.RightToLeft ? HorizontalAlignment.Right : HorizontalAlignment.Left,
                     AccessibleName = "Input",
                     AccessibleRole = AccessibleRole.Text,
                 };
+
                 if (multiline)
                 {
-                    _inputTextBox.SetBounds(Pad + 3, y + 3, boxW, inputH2 - 6);
+                    _inputTextBox.SetBounds(Pad + 3, y + 3, fw - Pad * 2 - 6, inputH2 - 6);
                 }
                 else
                 {
-                    // A single-line TextBox sizes its own height to the font, so explicitly centre
-                    // it within the input band — left-aligned text sitting in the vertical middle.
-                    var th = _inputTextBox.PreferredHeight;
-                    _inputTextBox.SetBounds(Pad + 3, y + (inputH2 - th) / 2, boxW, th);
+                    // Single-line TextBox sizes its own height to the font; centre it vertically
+                    // within the (now taller) band and leave room for the reveal toggle if present.
+                    var th    = _inputTextBox.PreferredHeight;
+                    var tbX   = Pad + 3 + (_cfg.RightToLeft ? eyeSize : 0);
+                    var tbW   = fw - Pad * 2 - 6 - eyeSize;
+                    _inputTextBox.SetBounds(tbX, y + (inputH2 - th) / 2, tbW, th);
                 }
                 Controls.Add(_inputTextBox);
+
+                if (password)
+                {
+                    // In-field "show / hide password" toggle (eye), RTL-aware.
+                    var eyeX = _cfg.RightToLeft ? _inputBandRect.Left : _inputBandRect.Right - eyeSize;
+                    var eye  = new RevealToggle(_theme, _scale)
+                    {
+                        Bounds = new Rectangle(eyeX, y, eyeSize, inputH2),
+                    };
+                    eye.RevealedChanged += (s, e) =>
+                    {
+                        _inputTextBox.PasswordChar = eye.Revealed ? '\0' : '●';
+                    };
+                    Controls.Add(eye);
+                    eye.BringToFront();
+                }
                 y += inputH2;
             }
         }
@@ -1171,9 +1198,10 @@ internal sealed class GlassDialog : Form
 
         if (_inputTextBox != null && !_inputTextBox.IsDisposed)
         {
-            var b = new Rectangle(Pad, _inputTextBox.Top - 3,
-                                   ClientSize.Width - Pad * 2, _inputTextBox.Height + 6);
-            if (_effectiveRadius > 0) { using var p = RoundRect(b, 3); g.DrawPath(borderPen, p); }
+            // Draw the border around the full input band so the box is a consistent height with
+            // the text vertically centred inside it (rather than hugging the single-line height).
+            var b = _inputBandRect;
+            if (_effectiveRadius > 0) { using var p = RoundRect(b, 4); g.DrawPath(borderPen, p); }
             else g.DrawRectangle(borderPen, b);
         }
 
@@ -1463,6 +1491,73 @@ internal sealed class GlassDialog : Form
                 using var fp = new Pen(Color.FromArgb(130, _theme.AccentColor), 1f) { DashStyle = DashStyle.Dot };
                 g.DrawRectangle(fp, new Rectangle(_rtl ? Width - box - Gap - tw : textX, 1, Math.Max(1, tw), Height - 3));
             }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Nested: in-field "show / hide password" eye toggle
+    // ═══════════════════════════════════════════════════════════════════════
+    private sealed class RevealToggle : Control
+    {
+        private readonly GlassTheme _theme;
+        private readonly float      _scale;
+        private bool _revealed, _hover;
+
+        public event EventHandler RevealedChanged;
+        public bool Revealed => _revealed;
+
+        public RevealToggle(GlassTheme theme, float scale)
+        {
+            _theme    = theme;
+            _scale    = scale;
+            BackColor = theme.InputBackColor;   // sits on the solid input background
+            Cursor    = Cursors.Hand;
+            TabStop   = false;
+            AccessibleRole = AccessibleRole.PushButton;
+            AccessibleName = "Show password";
+            SetStyle(ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.AllPaintingInWmPaint  |
+                     ControlStyles.UserPaint             |
+                     ControlStyles.Opaque, true);
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { _hover = true;  Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnClick(EventArgs e)
+        {
+            _revealed      = !_revealed;
+            AccessibleName = _revealed ? "Hide password" : "Show password";
+            Invalidate();
+            RevealedChanged?.Invoke(this, e);
+            base.OnClick(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            SetQuality(g);
+            using (var bg = new SolidBrush(_theme.InputBackColor)) g.FillRectangle(bg, ClientRectangle);
+
+            var col = Color.FromArgb(_hover ? 255 : 190, _theme.AccentColor);
+            using var pen = new Pen(col, Math.Max(1.3f, _scale * 1.4f))
+            {
+                StartCap = LineCap.Round,
+                EndCap   = LineCap.Round,
+            };
+
+            float cx = Width / 2f, cy = Height / 2f;
+            float ew = Width * 0.30f, eh = Height * 0.20f;
+
+            // Eye almond (two opposing arcs) + pupil.
+            g.DrawArc(pen, cx - ew, cy - eh * 2.0f, ew * 2, eh * 4, 25, 130);
+            g.DrawArc(pen, cx - ew, cy - eh * 2.0f, ew * 2, eh * 4, 205, 130);
+            var pr = eh * 0.85f;
+            using (var pupil = new SolidBrush(col)) g.FillEllipse(pupil, cx - pr, cy - pr, pr * 2, pr * 2);
+
+            // Slash when revealed (means "click to hide").
+            if (_revealed)
+                g.DrawLine(pen, cx - ew, cy + eh * 1.6f, cx + ew, cy - eh * 1.6f);
         }
     }
 
