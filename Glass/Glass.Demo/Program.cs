@@ -190,7 +190,9 @@ internal sealed class DemoForm : Form
         => GlassMessage.Create(
                 "Glass.Message 2.1 is available.\n\n" +
                 "• Native Windows 11 rounded corners and shadow\n" +
-                "• Smoother, time-based open/close animations\n" +
+                "• Smoother, time-based open / close animations\n" +
+                "• Themed checkbox, password reveal eye + Caps Lock warning\n" +
+                "• Taller, vertically-centred input fields and proper RTL alignment\n" +
                 "• Builds for .NET Framework 4.8.1 and .NET 8 / 9 / 10")
             .Title("Update Available")
             .Icon(MessageBoxIcon.Information)
@@ -267,9 +269,9 @@ internal sealed class DemoForm : Form
         var r = GlassMessage.Create(
                 "Authentication is required to connect to Contoso ERP.\n\n" +
                 "Server:  sql-prod-01.contoso.com\n" +
-                "Domain:  CONTOSO   ·   Auth: Windows Integrated\n" +
-                "Your password is transmitted over an encrypted TLS 1.3 channel and is never stored " +
-                "on this device.")
+                "Domain:  CONTOSO   ·   Auth: Windows Integrated\n\n" +
+                "Tip: click the eye to reveal what you typed. If Caps Lock is on, a themed " +
+                "warning appears below the field automatically.")
             .Title("Sign In — Contoso ERP")
             .Icon(MessageBoxIcon.Warning)
             .InputPassword("Active Directory password")

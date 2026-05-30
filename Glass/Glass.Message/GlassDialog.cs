@@ -83,8 +83,9 @@ internal sealed class GlassDialog : Form
     private TextBox     _inputTextBox;
     private Rectangle   _inputBandRect;   // full visual box for the single/multiline input border
     private ComboBox    _inputCombo;
-    private LinkLabel   _detailToggle;
-    private GlassButton _countdownBtn;
+    private LinkLabel     _detailToggle;
+    private CapsLockBadge _capsBadge;     // themed "Caps Lock is on" warning for password fields
+    private GlassButton   _countdownBtn;
     private string      _countdownBaseLabel = string.Empty;   // cached: avoids recomputing per tick
     private Font        _detailFont;
 
@@ -295,6 +296,7 @@ internal sealed class GlassDialog : Form
             c.Dispose();
         }
         Controls.Clear();
+        _capsBadge     = null;   // disposed with the rest of Controls above
         _inputTextBox  = null;
         _inputBandRect = Rectangle.Empty;
         _inputCombo    = null;
@@ -557,6 +559,27 @@ internal sealed class GlassDialog : Form
                     };
                     Controls.Add(eye);
                     eye.BringToFront();
+
+                    // Themed "Caps Lock is on" warning (a child overlay just below the field —
+                    // a child control is always painted, unlike a top-level popup during ShowDialog).
+                    _capsBadge = new CapsLockBadge(_theme, _scale)
+                    {
+                        Location = new Point(_inputBandRect.Left, _inputBandRect.Bottom + Scale(2)),
+                        Visible  = false,
+                    };
+                    Controls.Add(_capsBadge);
+                    _capsBadge.BringToFront();
+                    void UpdateCaps()
+                    {
+                        if (_inputTextBox == null || _inputTextBox.IsDisposed || _capsBadge == null || _capsBadge.IsDisposed)
+                            return;
+                        var on = IsKeyLocked(Keys.CapsLock) && _inputTextBox.Focused;
+                        _capsBadge.Visible = on;
+                        if (on) _capsBadge.BringToFront();
+                    }
+                    _inputTextBox.Enter += (s, e) => UpdateCaps();
+                    _inputTextBox.Leave += (s, e) => { if (_capsBadge != null && !_capsBadge.IsDisposed) _capsBadge.Visible = false; };
+                    _inputTextBox.KeyUp += (s, e) => UpdateCaps();
                 }
                 y += inputH2;
             }
@@ -1198,9 +1221,15 @@ internal sealed class GlassDialog : Form
 
         if (_inputTextBox != null && !_inputTextBox.IsDisposed)
         {
-            // Draw the border around the full input band so the box is a consistent height with
-            // the text vertically centred inside it (rather than hugging the single-line height).
+            // Fill the WHOLE band with the input colour first so the field is one uniform box —
+            // the text box only covers its centred font-height strip, so without this the band
+            // would show the dialog gradient above/below the text (the reported colour mismatch).
             var b = _inputBandRect;
+            using (var fill = new SolidBrush(_theme.InputBackColor))
+            {
+                if (_effectiveRadius > 0) { using var fp = RoundRect(b, 4); g.FillPath(fill, fp); }
+                else g.FillRectangle(fill, b);
+            }
             if (_effectiveRadius > 0) { using var p = RoundRect(b, 4); g.DrawPath(borderPen, p); }
             else g.DrawRectangle(borderPen, b);
         }
@@ -1539,26 +1568,135 @@ internal sealed class GlassDialog : Form
             SetQuality(g);
             using (var bg = new SolidBrush(_theme.InputBackColor)) g.FillRectangle(bg, ClientRectangle);
 
-            var col = Color.FromArgb(_hover ? 255 : 190, _theme.AccentColor);
-            using var pen = new Pen(col, Math.Max(1.3f, _scale * 1.4f))
-            {
-                StartCap = LineCap.Round,
-                EndCap   = LineCap.Round,
-            };
+            // Subtle circular hover highlight for affordance.
+            var d = (int)Math.Round(Math.Min(Width, Height) * 0.72f);
+            var hi = new Rectangle((Width - d) / 2, (Height - d) / 2, d, d);
+            if (_hover)
+                using (var hb = new SolidBrush(Color.FromArgb(28, _theme.AccentColor)))
+                    g.FillEllipse(hb, hi);
+
+            var col   = Color.FromArgb(_hover ? 255 : 175, _theme.AccentColor);
+            var lineW = Math.Max(1.3f, _scale * 1.5f);
+            using var pen = new Pen(col, lineW) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
 
             float cx = Width / 2f, cy = Height / 2f;
-            float ew = Width * 0.30f, eh = Height * 0.20f;
+            float ew = Width  * 0.24f;   // half-width of the almond
+            float eh = Height * 0.17f;   // half-height of the almond
 
-            // Eye almond (two opposing arcs) + pupil.
-            g.DrawArc(pen, cx - ew, cy - eh * 2.0f, ew * 2, eh * 4, 25, 130);
-            g.DrawArc(pen, cx - ew, cy - eh * 2.0f, ew * 2, eh * 4, 205, 130);
-            var pr = eh * 0.85f;
-            using (var pupil = new SolidBrush(col)) g.FillEllipse(pupil, cx - pr, cy - pr, pr * 2, pr * 2);
+            // Almond eye outline built from two symmetric Bézier curves (a real lens shape,
+            // not concentric circles) — reads cleanly as an eye at small sizes.
+            using (var eye = new GraphicsPath())
+            {
+                eye.AddBezier(cx - ew, cy, cx - ew * 0.45f, cy - eh, cx + ew * 0.45f, cy - eh, cx + ew, cy);
+                eye.AddBezier(cx + ew, cy, cx + ew * 0.45f, cy + eh, cx - ew * 0.45f, cy + eh, cx - ew, cy);
+                eye.CloseFigure();
+                g.DrawPath(pen, eye);
+            }
 
-            // Slash when revealed (means "click to hide").
+            // Iris + pupil.
+            float ir = eh * 0.95f;
+            g.DrawEllipse(pen, cx - ir, cy - ir, ir * 2, ir * 2);
+            using (var pupil = new SolidBrush(col))
+            {
+                float pr = ir * 0.45f;
+                g.FillEllipse(pupil, cx - pr, cy - pr, pr * 2, pr * 2);
+            }
+
+            // Diagonal slash when revealed → the universal "hide / eye-off" cue.
             if (_revealed)
-                g.DrawLine(pen, cx - ew, cy + eh * 1.6f, cx + ew, cy - eh * 1.6f);
+            {
+                using var slashBg = new Pen(_theme.InputBackColor, lineW + 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                g.DrawLine(slashBg, cx - ew * 1.05f, cy + eh * 1.7f, cx + ew * 1.05f, cy - eh * 1.7f);
+                g.DrawLine(pen,     cx - ew * 1.05f, cy + eh * 1.7f, cx + ew * 1.05f, cy - eh * 1.7f);
+            }
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Nested: themed "Caps Lock is on" warning. A child overlay (not a top-level
+    // popup) so it always paints reliably inside the modal dialog and matches the
+    // dialog palette instead of the stock yellow system tooltip.
+    // ═══════════════════════════════════════════════════════════════════════
+    private sealed class CapsLockBadge : Control
+    {
+        private readonly GlassTheme _theme;
+        private readonly float      _scale;
+        private readonly Font       _font;
+        private const string _text = "Caps Lock is on";
+        private readonly int _pad, _icon, _gap, _radius;
+
+        public CapsLockBadge(GlassTheme theme, float scale)
+        {
+            _theme  = theme;
+            _scale  = scale;
+            _font   = theme.MessageFont;
+            _pad    = Sc(8); _icon = Sc(13); _gap = Sc(6); _radius = Sc(4);
+
+            AccessibleRole = AccessibleRole.Alert;
+            AccessibleName = _text;
+            TabStop        = false;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.AllPaintingInWmPaint  |
+                     ControlStyles.UserPaint             |
+                     ControlStyles.Opaque, true);
+
+            var ts = TextRenderer.MeasureText(_text, _font);
+            Size = new Size(_pad + _icon + _gap + ts.Width + _pad,
+                            Math.Max(_icon, ts.Height) + Sc(6));
+        }
+
+        private int Sc(int v) => Math.Max(1, (int)(v * _scale));
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            SetQuality(g);
+
+            // Opaque control: fill the rounded-corner gaps with the dialog gradient slice first.
+            PaintThemedBackground(g, this, _theme);
+
+            var w = Width;
+            var h = Height;
+
+            // Elevated rounded panel (a touch lighter than the input bg) with accent border.
+            var panel = Color.FromArgb(
+                Math.Min(255, _theme.InputBackColor.R + 8),
+                Math.Min(255, _theme.InputBackColor.G + 10),
+                Math.Min(255, _theme.InputBackColor.B + 16));
+            using (var path = RoundRect(new Rectangle(0, 0, w - 1, h - 1), _radius))
+            {
+                using (var fill = new SolidBrush(panel)) g.FillPath(fill, path);
+                using var edge = new Pen(Color.FromArgb(200, _theme.AccentColor), Math.Max(1f, _scale));
+                g.DrawPath(edge, path);
+            }
+
+            // Warning triangle (themed accent) with an exclamation mark.
+            var ix = _pad;
+            var iy = (h - _icon) / 2;
+            using (var tri = new GraphicsPath())
+            {
+                tri.AddPolygon(new[]
+                {
+                    new PointF(ix + _icon / 2f, iy),
+                    new PointF(ix + _icon,      iy + _icon),
+                    new PointF(ix,              iy + _icon),
+                });
+                tri.CloseFigure();
+                using var fill = new SolidBrush(_theme.AccentColor);
+                g.FillPath(fill, tri);
+            }
+            using (var exFont = new Font(_font.FontFamily, _icon * 0.52f, FontStyle.Bold, GraphicsUnit.Pixel))
+                TextRenderer.DrawText(g, "!", exFont,
+                    new Rectangle(ix, iy + _icon / 5, _icon, _icon),
+                    Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.NoPadding);
+
+            var textX = ix + _icon + _gap;
+            TextRenderer.DrawText(g, _text, _font,
+                new Rectangle(textX, 0, w - textX - _pad, h),
+                _theme.MessageColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        }
+        // _font is a shared theme font — not disposed here.
     }
 
     // ═══════════════════════════════════════════════════════════════════════
