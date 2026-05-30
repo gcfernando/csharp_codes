@@ -43,7 +43,8 @@ internal sealed class GlassButton : Button
         SetStyle(
             ControlStyles.OptimizedDoubleBuffer |
             ControlStyles.AllPaintingInWmPaint  |
-            ControlStyles.UserPaint, true);
+            ControlStyles.UserPaint             |
+            ControlStyles.Opaque, true);   // Opaque: we paint every pixel — no WinForms transparent replay
     }
 
     // ── Mnemonic processing (#17) ─────────────────────────────────────────
@@ -170,6 +171,10 @@ internal sealed class GlassButton : Button
     {
         var g = pevent.Graphics;
         GlassDialog.SetQuality(g);
+
+        // We are Opaque, so paint our own backdrop: the slice of the dialog's gradient behind us.
+        // This fills the rounded-corner triangles seamlessly and clears every frame (no ghosting).
+        GlassDialog.PaintThemedBackground(g, this, _theme);
 
         if (SystemInformation.HighContrast) { PaintHighContrast(g); return; }
 

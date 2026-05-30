@@ -502,21 +502,34 @@ internal sealed class GlassDialog : Form
             }
             else
             {
-                var inputH2 = _cfg.InputMode == GlassInputMode.Multiline ? InputMLH : InputH;
+                var multiline = _cfg.InputMode == GlassInputMode.Multiline;
+                var inputH2   = multiline ? InputMLH : InputH;
+                var boxW      = fw - Pad * 2 - 6;
                 _inputTextBox = new PlaceholderTextBox(_cfg.InputPlaceholder ?? string.Empty)
                 {
-                    Bounds         = new Rectangle(Pad + 3, y + 3, fw - Pad * 2 - 6, inputH2 - 6),
                     Font           = _theme.MessageFont,
                     BackColor      = _theme.InputBackColor,
                     ForeColor      = _theme.InputForeColor,
                     BorderStyle    = BorderStyle.None,
-                    Multiline      = _cfg.InputMode == GlassInputMode.Multiline,
-                    ScrollBars     = _cfg.InputMode == GlassInputMode.Multiline ? ScrollBars.Vertical : ScrollBars.None,
+                    Multiline      = multiline,
+                    ScrollBars     = multiline ? ScrollBars.Vertical : ScrollBars.None,
                     PasswordChar   = _cfg.InputMode == GlassInputMode.Password ? '●' : '\0',
                     Text           = _cfg.InputDefault ?? string.Empty,
+                    TextAlign      = _cfg.RightToLeft ? HorizontalAlignment.Right : HorizontalAlignment.Left,
                     AccessibleName = "Input",
                     AccessibleRole = AccessibleRole.Text,
                 };
+                if (multiline)
+                {
+                    _inputTextBox.SetBounds(Pad + 3, y + 3, boxW, inputH2 - 6);
+                }
+                else
+                {
+                    // A single-line TextBox sizes its own height to the font, so explicitly centre
+                    // it within the input band — left-aligned text sitting in the vertical middle.
+                    var th = _inputTextBox.PreferredHeight;
+                    _inputTextBox.SetBounds(Pad + 3, y + (inputH2 - th) / 2, boxW, th);
+                }
                 Controls.Add(_inputTextBox);
                 y += inputH2;
             }
@@ -784,18 +797,32 @@ internal sealed class GlassDialog : Form
     {
         base.OnLoad(e);
         if (_cfg.Animation == GlassAnimation.None)
-            Opacity = _targetOpacity;
-        else
         {
-            Opacity    = 0.0;
-            _fadingOut = false;
+            Opacity = _targetOpacity;
+            return;
         }
+
+        Opacity    = 0.0;
+        _fadingOut = false;
+        // Position/size the window at its entrance state BEFORE the first paint. Doing this here
+        // (rather than in OnShown, after the window is already visible) avoids a one-frame white
+        // flash on the Scale animation where the window was briefly shown at full size.
+        SetupEntranceAnimation();
     }
 
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
 
+        if (_cfg.Animation != GlassAnimation.None)
+            StartFadeTimer();
+
+        if (_cfg.AutoCloseMs > 0)
+            StartCountdown();
+    }
+
+    private void SetupEntranceAnimation()
+    {
         var screen  = Owner != null ? Screen.FromHandle(Owner.Handle) : Screen.FromPoint(Cursor.Position);
         var wa      = screen.WorkingArea;
         var centerX = wa.Left + (wa.Width  - Width)  / 2;
@@ -811,7 +838,6 @@ internal sealed class GlassDialog : Form
                 break;
 
             case GlassAnimation.Scale:   // #3: actual scale implementation
-                Location        = _slideFinal;
                 _scaleFinalSize = new Size(Width, Height);
                 _scaleFinalLoc  = _slideFinal;
                 _scaleActive    = true;
@@ -829,12 +855,6 @@ internal sealed class GlassDialog : Form
                 Location = _slideFinal;
                 break;
         }
-
-        if (_cfg.Animation != GlassAnimation.None)
-            StartFadeTimer();
-
-        if (_cfg.AutoCloseMs > 0)
-            StartCountdown();
     }
 
     private void BeginClose(DialogResult result)
@@ -1210,6 +1230,23 @@ internal sealed class GlassDialog : Form
         _                                  => DialogResult.Cancel,
     };
 
+    /// <summary>
+    /// Fills <paramref name="c"/>'s background with the slice of the dialog's vertical theme
+    /// gradient that sits directly behind it. UserPaint child controls (buttons, the checkbox)
+    /// must call this from <c>OnPaintBackground</c>: WinForms' default transparent-background
+    /// handling smears a custom-painted parent, which is what produced the ghosting / white
+    /// corner artefacts. Painting the exact gradient slice is seamless and clears every frame.
+    /// </summary>
+    internal static void PaintThemedBackground(Graphics g, Control c, GlassTheme theme)
+    {
+        var ph = c.Parent?.Height ?? c.Height;
+        if (ph < 1) ph = 1;
+        using var brush = new LinearGradientBrush(
+            new Rectangle(0, -c.Top, Math.Max(1, c.Width), ph),
+            theme.BackgroundTop, theme.BackgroundBottom, LinearGradientMode.Vertical);
+        g.FillRectangle(brush, c.ClientRectangle);
+    }
+
     internal static void SetQuality(Graphics g)
     {
         g.CompositingMode    = CompositingMode.SourceOver;
@@ -1350,13 +1387,12 @@ internal sealed class GlassDialog : Form
             _scale = scale;
             _rtl   = rtl;
             AutoSize  = true;
-            BackColor = Color.Transparent;
             ForeColor = theme.MessageColor;
             Cursor    = Cursors.Hand;
             SetStyle(ControlStyles.OptimizedDoubleBuffer |
                      ControlStyles.AllPaintingInWmPaint  |
                      ControlStyles.UserPaint             |
-                     ControlStyles.SupportsTransparentBackColor |
+                     ControlStyles.Opaque                |   // we paint every pixel ourselves
                      ControlStyles.ResizeRedraw, true);
         }
 
@@ -1378,6 +1414,10 @@ internal sealed class GlassDialog : Form
         {
             var g = pe.Graphics;
             SetQuality(g);
+
+            // Opaque control: paint our own backdrop (the dialog's gradient slice) so nothing
+            // ghosts and WinForms never replays the parent's content into our region.
+            PaintThemedBackground(g, this, _theme);
 
             var box  = Box;
             var rect = new Rectangle(_rtl ? Width - box : 0, (Height - box) / 2, box - 1, box - 1);
