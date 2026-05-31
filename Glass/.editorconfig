@@ -1,0 +1,74 @@
+# -----------------------------------------------------------------------------
+#  Glass — solution-wide code style and analyzer conventions.
+#  Developer ::> Gehan Fernando
+#
+#  These settings document the house style and let `dotnet format` apply it
+#  consistently. Severities are set to "suggestion" so the rules guide cleanup
+#  without failing the build.
+# -----------------------------------------------------------------------------
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{cs,csx}]
+indent_size = 4
+
+# --- 'var' usage: prefer var everywhere (IDE0007) ---------------------------
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# --- Always use braces, even for single-line blocks (IDE0011) ---------------
+csharp_prefer_braces = true:suggestion
+
+# --- Parentheses for clarity in expressions (IDE0048) -----------------------
+dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:suggestion
+dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:suggestion
+dotnet_style_parentheses_in_other_binary_operators = always_for_clarity:suggestion
+dotnet_style_parentheses_in_other_operators = never_if_unnecessary:suggestion
+
+# --- Null handling (IDE0031 / RCS1146) --------------------------------------
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+
+# --- Fields and properties --------------------------------------------------
+dotnet_style_readonly_field = true:suggestion          # IDE0044 / S2933 / RCS1169
+dotnet_style_prefer_auto_properties = true:suggestion  # IDE0032
+
+# --- Expression-bodied members ----------------------------------------------
+csharp_style_expression_bodied_lambdas = true:suggestion   # IDE0053 / RCS1021
+
+# --- Method group conversion (IDE0200) --------------------------------------
+csharp_style_prefer_method_group_conversion = true:suggestion
+
+# --- Collection expressions (IDE0300 / S3878) -------------------------------
+dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
+
+# --- Use System.Threading.Lock where available (IDE0330) --------------------
+csharp_prefer_system_threading_lock = true:suggestion
+
+# --- Primary constructors (IDE0290) -----------------------------------------
+csharp_style_prefer_primary_constructors = true:suggestion
+
+# -----------------------------------------------------------------------------
+#  Analyzer rule severities
+# -----------------------------------------------------------------------------
+
+# Quality fixes worth applying.
+dotnet_diagnostic.CA1825.severity = suggestion   # use Array.Empty<T>()
+dotnet_diagnostic.CA1859.severity = suggestion   # prefer concrete types
+dotnet_diagnostic.CA2263.severity = suggestion   # prefer generic overload
+
+# DllImport is kept (not LibraryImport): the source generator behind
+# LibraryImportAttribute is not available on the net481 target, and these few
+# P/Invokes must compile identically across every target framework.
+dotnet_diagnostic.SYSLIB1054.severity = none
+
+# This library is Windows-only by design.
+dotnet_diagnostic.CA1416.severity = none
