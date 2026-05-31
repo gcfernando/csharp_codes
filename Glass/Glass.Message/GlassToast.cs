@@ -55,6 +55,8 @@ public static class GlassToast
 {
     // Guards the shared list because toasts may be created/closed from the UI
     // thread at different times; the list is read while computing stack offsets.
+    // (Kept as 'object' rather than System.Threading.Lock so the lock compiles on
+    //  the net481 and net8 targets, where the Lock type does not exist.)
     private static readonly object _lock = new();
     private static readonly List<ToastForm> _active = [];
 

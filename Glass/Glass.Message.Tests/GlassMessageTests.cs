@@ -219,7 +219,7 @@ public class GlassBuilderTests
     [Fact]
     public void Builder_Buttons_Empty_Array_Does_Not_Throw()
     {
-        var ex = Record.Exception(() => GlassMessage.Create("msg").Buttons(new string[0]));
+        var ex = Record.Exception(() => GlassMessage.Create("msg").Buttons([]));
         Assert.Null(ex);
     }
 }

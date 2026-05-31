@@ -50,8 +50,11 @@ csharp_style_prefer_method_group_conversion = true:suggestion
 # --- Collection expressions (IDE0300 / S3878) -------------------------------
 dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
 
-# --- Use System.Threading.Lock where available (IDE0330) --------------------
-csharp_prefer_system_threading_lock = true:suggestion
+# --- Locking ----------------------------------------------------------------
+# System.Threading.Lock only exists on net9+, but this library also targets
+# net481 and net8, so the lock object stays a plain 'object' (IDE0330 off).
+csharp_prefer_system_threading_lock = false
+dotnet_diagnostic.IDE0330.severity = none
 
 # --- Primary constructors (IDE0290) -----------------------------------------
 csharp_style_prefer_primary_constructors = true:suggestion
