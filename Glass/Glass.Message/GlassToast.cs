@@ -8,7 +8,6 @@ using System.Windows.Forms;
 
 namespace Glass;
 
-/// <summary>Screen corner for <see cref="GlassToast"/> notifications.</summary>
 public enum ToastPosition
 {
     BottomRight,
@@ -19,7 +18,6 @@ public enum ToastPosition
     TopCenter,
 }
 
-/// <summary>Configuration for a <see cref="GlassToast"/> notification.</summary>
 public sealed class GlassToastOptions
 {
     public string        Message  { get; set; } = string.Empty;
@@ -30,20 +28,14 @@ public sealed class GlassToastOptions
     public ToastPosition Position   { get; set; } = ToastPosition.BottomRight;
     public Action        OnClick    { get; set; }
 
-    /// <summary>
-    /// <c>true/false</c> overrides <see cref="GlassMessage.UseRoundedCorners"/> for this toast.
-    /// <c>null</c> (default) inherits the global setting.
-    /// </summary>
     public bool? UseRoundedCorners { get; set; }
 }
 
-/// <summary>Non-blocking corner notifications that stack automatically.</summary>
 public static class GlassToast
 {
     private static readonly object _lock = new object();
     private static readonly List<ToastForm> _active = new List<ToastForm>();
 
-    // ── Simple overloads ──────────────────────────────────────────────────
 
     public static void Show(string message, int durationMs = 4_000)
         => Show(new GlassToastOptions { Message = message, DurationMs = durationMs });
@@ -93,7 +85,6 @@ public static class GlassToast
         return tcs.Task;
     }
 
-    // ── Stack management ──────────────────────────────────────────────────
 
     private static void PositionToast(ToastForm form, ToastPosition pos)
     {
@@ -111,7 +102,6 @@ public static class GlassToast
         form.Location = CalcToastLocation(screen, form.Width, form.Height, pos, stackedH, margin);
     }
 
-    // #2 fix: collect moves under lock, apply positions outside the lock
     private static void ReStack(ToastPosition pos)
     {
         var moves = new List<(ToastForm form, Point location)>();
@@ -130,7 +120,6 @@ public static class GlassToast
             }
         }
 
-        // UI property writes outside the lock
         foreach (var (form, loc) in moves)
             if (!form.IsDisposed)
                 form.Location = loc;
@@ -156,16 +145,13 @@ public static class GlassToast
         };
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // ToastForm
-    // ═══════════════════════════════════════════════════════════════════════
     internal sealed class ToastForm : Form
     {
         private readonly GlassToastOptions _opts;
         private readonly GlassTheme        _theme;
-        private readonly Bitmap            _icon;            // from shared cache; never disposed here
+        private readonly Bitmap            _icon;
         private readonly int               _effectiveRadius;
-        private bool                       _dwmRounded;      // DWM owns the corners (Win11+)
+        private bool                       _dwmRounded;
         internal ToastPosition Position => _opts.Position;
 
         private System.Windows.Forms.Timer _fadeTimer;
@@ -256,7 +242,7 @@ public static class GlassToast
             {
                 _fadeStep++;
                 var t      = Math.Min(1.0, (double)_fadeStep / _fadeTicks);
-                var eased  = t * t * (3.0 - 2.0 * t);   // smoothstep, matches the dialog easing
+                var eased  = t * t * (3.0 - 2.0 * t);
 
                 Opacity = _fadingOut
                     ? _theme.Opacity * (1.0 - eased)
@@ -267,7 +253,6 @@ public static class GlassToast
                     _fadeTimer.Stop(); _fadeTimer.Dispose(); _fadeTimer = null;
                     if (!_fadingOut)
                     {
-                        // Timer.Interval must be >= 1; a non-positive DurationMs would otherwise throw.
                         _stayTimer = new System.Windows.Forms.Timer { Interval = Math.Max(1, _opts.DurationMs) };
                         _stayTimer.Tick += (ss, ee) => { _stayTimer.Stop(); _stayTimer.Dispose(); _stayTimer = null; BeginDismiss(); };
                         _stayTimer.Start();
@@ -342,7 +327,6 @@ public static class GlassToast
             {
                 _fadeTimer?.Stop(); _fadeTimer?.Dispose();
                 _stayTimer?.Stop(); _stayTimer?.Dispose();
-                // _icon is from shared cache — never disposed here
             }
             base.Dispose(disposing);
         }

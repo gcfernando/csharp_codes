@@ -13,5 +13,4 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyFileVersion("2.1.0.0")]
 [assembly: AssemblyInformationalVersion("2.1.0")]
 
-// Allows unit-test project to access internal members (GlassDialogConfig, GlassResult ctor, etc.)
 [assembly: InternalsVisibleTo("Glass.Message.Tests")]

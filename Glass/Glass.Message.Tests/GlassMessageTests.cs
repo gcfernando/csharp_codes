@@ -6,9 +6,6 @@ using Xunit;
 
 namespace Glass.Message.Tests;
 
-// ─────────────────────────────────────────────────────────────────────────
-// Pure-logic tests — no visible window is opened in any test.
-// ─────────────────────────────────────────────────────────────────────────
 
 public class ThemeTests
 {
@@ -40,7 +37,6 @@ public class ThemeTests
         Assert.NotNull(GlassTheme.Default.ButtonFont);
     }
 
-    // #10: IDisposable — custom theme disposes without throwing
     [Fact] public void Custom_Theme_Dispose_Does_Not_Throw()
     {
         var theme = new GlassTheme
@@ -53,7 +49,6 @@ public class ThemeTests
         Assert.Null(ex);
     }
 
-    // #10: calling Dispose twice on a custom theme is safe
     [Fact] public void Custom_Theme_Dispose_Twice_Is_Safe()
     {
         var theme = new GlassTheme();
@@ -62,14 +57,12 @@ public class ThemeTests
         Assert.Null(ex);
     }
 
-    // #10: static presets are protected — Dispose is a no-op
     [Fact] public void Preset_Dispose_Does_Not_Throw_And_Fonts_Stay_Valid()
     {
-        GlassTheme.Default.Dispose();  // must be safe (preset guard)
-        Assert.NotNull(GlassTheme.Default.TitleFont);  // still usable
+        GlassTheme.Default.Dispose();
+        Assert.NotNull(GlassTheme.Default.TitleFont);
     }
 
-    // Preset CornerRadius retains its configured value
     [Fact] public void Theme_CornerRadius_Default_Is_8() =>
         Assert.Equal(8, GlassTheme.Default.CornerRadius);
 
@@ -118,7 +111,7 @@ public class GlassBuilderTests
             .Detail("stack trace here")
             .Progress(50, 100)
             .RightToLeft(false)
-            .RoundedCorners(true);   // #5/#13: RoundedCorners is chainable
+            .RoundedCorners(true);
         Assert.NotNull(b);
     }
 
@@ -128,7 +121,6 @@ public class GlassBuilderTests
         Assert.NotNull(b);
     }
 
-    // #13: RoundedCorners(true) is chainable and returns builder
     [Fact] public void Builder_RoundedCorners_True_Returns_Builder()
     {
         var b = GlassMessage.Create("msg").RoundedCorners(true);
@@ -141,17 +133,12 @@ public class GlassBuilderTests
         Assert.NotNull(b);
     }
 
-    // #13: calling without RoundedCorners leaves null in config (inherits global)
     [Fact] public void Builder_Without_RoundedCorners_Leaves_Config_Null()
     {
-        // We can't inspect BuildConfig() directly (private), but we can verify
-        // that GlassMessage.UseRoundedCorners=false + no .RoundedCorners() call
-        // gives the same "no rounded" behavior as explicitly false.
         var savedGlobal = GlassMessage.UseRoundedCorners;
         try
         {
             GlassMessage.UseRoundedCorners = false;
-            // Just verify no exception when building — the dialog inherits global
             Assert.NotNull(GlassMessage.Create("test"));
         }
         finally
@@ -160,21 +147,18 @@ public class GlassBuilderTests
         }
     }
 
-    // #1: AcceptButton is set — the builder doesn't throw with default config
     [Fact] public void Builder_With_Animation_None_Returns_Builder()
     {
         var b = GlassMessage.Create("msg").Animation(GlassAnimation.None);
         Assert.NotNull(b);
     }
 
-    // #3: Scale animation is a defined enum value
     [Fact] public void Builder_Scale_Animation_Is_Accepted()
     {
         var b = GlassMessage.Create("msg").Animation(GlassAnimation.Scale);
         Assert.NotNull(b);
     }
 
-    // #14: Scale is a distinct enum value, not an alias of None or Fade
     [Fact] public void GlassAnimation_Scale_Is_Distinct_Enum_Value()
     {
         Assert.NotEqual(GlassAnimation.Fade,  GlassAnimation.Scale);
@@ -182,14 +166,12 @@ public class GlassBuilderTests
         Assert.NotEqual(GlassAnimation.SlideDown, GlassAnimation.Scale);
     }
 
-    // #3: All four animation values are defined
     [Fact] public void GlassAnimation_Has_Four_Values()
     {
         var values = Enum.GetValues<GlassAnimation>();
         Assert.Equal(4, values.Length);
     }
 
-    // Buttons(null) guard (#4 in builder)
     [Fact] public void Builder_Buttons_Null_Array_Does_Not_Throw()
     {
         var ex = Record.Exception(() => GlassMessage.Create("msg").Buttons((string[])null));
@@ -229,7 +211,6 @@ public class GlassDialogConfigTests
     [Fact] public void HasDetail_True_When_Set() =>
         Assert.True(new GlassDialogConfig { DetailText = "info" }.HasDetail);
 
-    // #13: UseRoundedCorners defaults to null (inherit from global)
     [Fact] public void UseRoundedCorners_Defaults_To_Null() =>
         Assert.Null(new GlassDialogConfig().UseRoundedCorners);
 
@@ -242,10 +223,8 @@ public class GlassDialogConfigTests
 
 public class GlassMessageStaticTests
 {
-    // Serialize access to static state with a shared lock per xUnit process
     private static readonly object _staticLock = new();
 
-    // #13: global UseRoundedCorners defaults to false
     [Fact] public void UseRoundedCorners_Global_Default_Is_False() =>
         Assert.False(GlassMessage.UseRoundedCorners);
 
@@ -288,7 +267,6 @@ public class ToastOptionsTests
     [Fact] public void Default_Duration_Is_4000ms() =>
         Assert.Equal(4_000, new GlassToastOptions().DurationMs);
 
-    // #13: UseRoundedCorners defaults to null (inherit from global)
     [Fact] public void UseRoundedCorners_Defaults_To_Null() =>
         Assert.Null(new GlassToastOptions().UseRoundedCorners);
 
@@ -301,7 +279,6 @@ public class ToastOptionsTests
 
 public class RoundRectTests
 {
-    // Verify the RoundRect helper returns a non-null path for all radius values
     [Fact] public void RoundRect_Radius_Zero_Returns_Rectangle_Path()
     {
         using var path = GlassDialog.RoundRect(new Rectangle(0, 0, 100, 50), 0);
@@ -313,7 +290,6 @@ public class RoundRectTests
     {
         using var pathFlat   = GlassDialog.RoundRect(new Rectangle(0, 0, 100, 50), 0);
         using var pathRound  = GlassDialog.RoundRect(new Rectangle(0, 0, 100, 50), 8);
-        // Rounded path has more points (arcs add vertices)
         Assert.True(pathRound.PointCount > pathFlat.PointCount);
     }
 

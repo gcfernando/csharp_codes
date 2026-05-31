@@ -5,12 +5,10 @@ using System.Windows.Forms;
 
 namespace Glass;
 
-/// <summary>Fluent builder for <see cref="GlassMessage"/> dialogs.</summary>
 public sealed class GlassBuilder
 {
     private readonly string _message;
 
-    // ── Core ──────────────────────────────────────────────────────────────
     private string                  _title         = string.Empty;
     private MessageBoxIcon          _icon          = MessageBoxIcon.None;
     private Bitmap                  _customIcon;
@@ -20,44 +18,30 @@ public sealed class GlassBuilder
     private IWin32Window            _owner;
     private string[]                _customLabels;
 
-    // ── Animation ─────────────────────────────────────────────────────────
     private GlassAnimation _animation = GlassAnimation.Fade;
 
-    // ── Auto-close ────────────────────────────────────────────────────────
     private int _autoCloseMs;
 
-    // ── Checkbox ──────────────────────────────────────────────────────────
     private string _checkBoxLabel;
     private bool   _checkBoxDefault;
 
-    // ── Input ─────────────────────────────────────────────────────────────
     private GlassInputMode _inputMode = GlassInputMode.None;
     private string         _inputPlaceholder;
     private string[]       _inputDropdownItems;
     private string         _inputDefault;
 
-    // ── Detail ────────────────────────────────────────────────────────────
     private string _detailText;
 
-    // ── Progress ──────────────────────────────────────────────────────────
     private bool _showProgress;
     private int  _progressValue = -1;
     private int  _progressMax   = 100;
 
-    // ── Layout ────────────────────────────────────────────────────────────
     private bool _rightToLeft;
 
-    // ── Shape — null means "inherit from GlassMessage.UseRoundedCorners" ──
     private bool? _roundedCorners;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Constructor
-    // ═══════════════════════════════════════════════════════════════════════
     internal GlassBuilder(string message) => _message = message ?? string.Empty;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Chainable methods
-    // ═══════════════════════════════════════════════════════════════════════
 
     public GlassBuilder Title(string title)      { _title = title ?? string.Empty; return this; }
     public GlassBuilder Icon(MessageBoxIcon i)   { _icon = i; _customIcon = null; return this; }
@@ -67,7 +51,6 @@ public sealed class GlassBuilder
     public GlassBuilder Owner(IWin32Window o)    { _owner = o; return this; }
     public GlassBuilder Animation(GlassAnimation a) { _animation = a; return this; }
 
-    // ── Buttons ───────────────────────────────────────────────────────────
 
     public GlassBuilder Buttons(MessageBoxButtons buttons)
     {
@@ -76,9 +59,6 @@ public sealed class GlassBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets custom button labels.  1 label → OK, 2 → OKCancel, 3+ → YesNoCancel.
-    /// </summary>
     public GlassBuilder Buttons(params string[] labels)
     {
         if (labels == null || labels.Length == 0) return this;
@@ -92,25 +72,16 @@ public sealed class GlassBuilder
         return this;
     }
 
-    // ── Shape ─────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Enables or disables rounded corners for this dialog.
-    /// When not called, <see cref="GlassMessage.UseRoundedCorners"/> is used.
-    /// </summary>
     public GlassBuilder RoundedCorners(bool enable = true)
     {
         _roundedCorners = enable;
         return this;
     }
 
-    // ── Auto-close ────────────────────────────────────────────────────────
 
-    /// <summary>Auto-closes the dialog (returning the default button) after the given delay.
-    /// Values &lt;= 0 disable auto-close.</summary>
     public GlassBuilder AutoClose(int milliseconds) { _autoCloseMs = Math.Max(0, milliseconds); return this; }
 
-    // ── Checkbox ──────────────────────────────────────────────────────────
 
     public GlassBuilder CheckBox(string label, bool defaultChecked = false)
     {
@@ -119,7 +90,6 @@ public sealed class GlassBuilder
         return this;
     }
 
-    // ── Inline input ──────────────────────────────────────────────────────
 
     public GlassBuilder InputText(string placeholder = "", string defaultValue = "")
     {
@@ -152,11 +122,9 @@ public sealed class GlassBuilder
         return this;
     }
 
-    // ── Expandable detail ─────────────────────────────────────────────────
 
     public GlassBuilder Detail(string detail) { _detailText = detail; return this; }
 
-    // ── Progress bar ──────────────────────────────────────────────────────
 
     public GlassBuilder ProgressIndeterminate()
     {
@@ -173,20 +141,13 @@ public sealed class GlassBuilder
         return this;
     }
 
-    // ── Layout ────────────────────────────────────────────────────────────
 
     public GlassBuilder RightToLeft(bool enable = true) { _rightToLeft = enable; return this; }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Terminal methods
-    // ═══════════════════════════════════════════════════════════════════════
 
     public DialogResult Show()   => GlassMessage.CoreEx(_owner, BuildConfig()).Button;
     public GlassResult  ShowEx() => GlassMessage.CoreEx(_owner, BuildConfig());
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Config assembly
-    // ═══════════════════════════════════════════════════════════════════════
     private GlassDialogConfig BuildConfig() => new GlassDialogConfig
     {
         Message            = _message,
@@ -210,7 +171,6 @@ public sealed class GlassBuilder
         ProgressValue      = _progressValue,
         ProgressMax        = _progressMax,
         RightToLeft        = _rightToLeft,
-        // null means "inherit from GlassMessage.UseRoundedCorners" at dialog construction time
         UseRoundedCorners  = _roundedCorners,
     };
 }

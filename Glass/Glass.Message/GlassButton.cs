@@ -5,10 +5,6 @@ using System.Windows.Forms;
 
 namespace Glass;
 
-// ─────────────────────────────────────────────────────────────────────────
-// GlassButton — smooth-transition, GDI-cached premium button.
-// cornerRadius = 0 → sharp rectangular edges; > 0 → rounded.
-// ─────────────────────────────────────────────────────────────────────────
 internal sealed class GlassButton : Button
 {
     private readonly GlassTheme _theme;
@@ -18,7 +14,6 @@ internal sealed class GlassButton : Button
     private bool  _targetHover;
     private System.Windows.Forms.Timer _transTimer;
 
-    // ── Cached GDI resources — invalidated on resize or state change ──────
     private GraphicsPath          _path;
     private Size                  _pathSize;
     private LinearGradientBrush   _fillBrush;
@@ -44,10 +39,9 @@ internal sealed class GlassButton : Button
             ControlStyles.OptimizedDoubleBuffer |
             ControlStyles.AllPaintingInWmPaint  |
             ControlStyles.UserPaint             |
-            ControlStyles.Opaque, true);   // Opaque: we paint every pixel — no WinForms transparent replay
+            ControlStyles.Opaque, true);
     }
 
-    // ── Mnemonic processing (#17) ─────────────────────────────────────────
 
     protected override bool ProcessMnemonic(char charCode)
     {
@@ -60,7 +54,6 @@ internal sealed class GlassButton : Button
         return base.ProcessMnemonic(charCode);
     }
 
-    // ── State transitions ─────────────────────────────────────────────────
 
     protected override void OnMouseEnter(EventArgs e) { _hovered = true;  StartTransition(true);        base.OnMouseEnter(e); }
     protected override void OnMouseLeave(EventArgs e) { _hovered = false; StartTransition(_focused);    base.OnMouseLeave(e); }
@@ -94,7 +87,6 @@ internal sealed class GlassButton : Button
         _transTimer.Start();
     }
 
-    // ── Cached shape path ─────────────────────────────────────────────────
 
     private GraphicsPath CachedPath
     {
@@ -110,7 +102,6 @@ internal sealed class GlassButton : Button
         }
     }
 
-    // ── Cached fill brush (#5) ────────────────────────────────────────────
 
     private LinearGradientBrush GetFillBrush(float t, bool pressed)
     {
@@ -141,7 +132,6 @@ internal sealed class GlassButton : Button
         return _fillBrush;
     }
 
-    // ── Cached pens (#5) ──────────────────────────────────────────────────
 
     private Pen GetGlowPen(int alpha)
     {
@@ -165,15 +155,12 @@ internal sealed class GlassButton : Button
         return _cachedEdgePen;
     }
 
-    // ── Paint ─────────────────────────────────────────────────────────────
 
     protected override void OnPaint(PaintEventArgs pevent)
     {
         var g = pevent.Graphics;
         GlassDialog.SetQuality(g);
 
-        // We are Opaque, so paint our own backdrop: the slice of the dialog's gradient behind us.
-        // This fills the rounded-corner triangles seamlessly and clears every frame (no ghosting).
         GlassDialog.PaintThemedBackground(g, this, _theme);
 
         if (SystemInformation.HighContrast) { PaintHighContrast(g); return; }
@@ -181,10 +168,8 @@ internal sealed class GlassButton : Button
         var path = CachedPath;
         var t    = _pressed ? 0f : _hoverT;
 
-        // ── Fill gradient (cached) ────────────────────────────────────────
         g.FillPath(GetFillBrush(t, _pressed), path);
 
-        // ── Press inner shadow ────────────────────────────────────────────
         if (_pressed)
         {
             var shadowH = Math.Max(1, Height / 4);
@@ -197,7 +182,6 @@ internal sealed class GlassButton : Button
             g.ResetClip();
         }
 
-        // ── Gloss shelf ───────────────────────────────────────────────────
         var glossH    = Math.Max(1, Height / 3);
         var glossRect = new Rectangle(1, 1, Width - 2, glossH);
         using (var gp = GlassDialog.RoundRect(glossRect, Math.Max(0, _cornerRadius - 1)))
@@ -212,11 +196,9 @@ internal sealed class GlassButton : Button
             g.ResetClip();
         }
 
-        // ── Border: outer glow + crisp edge (cached pens) ────────────────
         g.DrawPath(GetGlowPen((int)(28 + t * 45)), path);
         g.DrawPath(GetEdgePen(_pressed ? 210 : (int)(85 + t * 130)), path);
 
-        // ── Focus ring ────────────────────────────────────────────────────
         if (_focused && !_pressed)
         {
             var fr     = new Rectangle(2, 2, Width - 5, Height - 5);
@@ -227,7 +209,6 @@ internal sealed class GlassButton : Button
             g.DrawPath(fp2, fp);
         }
 
-        // ── Text (shifts 1px on press for depth cue) ──────────────────────
         var textRect = new Rectangle(0, _pressed ? 1 : 0, Width, Height - (_pressed ? 1 : 0));
         var flags = TextFormatFlags.HorizontalCenter |
                     TextFormatFlags.VerticalCenter   |
@@ -253,7 +234,6 @@ internal sealed class GlassButton : Button
             Color.Transparent, flags);
     }
 
-    // ── Color helpers ─────────────────────────────────────────────────────
 
     private static Color Blend(Color a, Color b, float t)
         => Color.FromArgb(

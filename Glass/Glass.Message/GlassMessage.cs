@@ -4,27 +4,13 @@ using System.Windows.Forms;
 
 namespace Glass;
 
-/// <summary>
-/// Modern, animated, themed replacement for <see cref="MessageBox"/>.
-/// All existing <c>MessageBox.Show(…)</c> call sites compile unchanged.
-/// </summary>
 public static class GlassMessage
 {
-    // ── Global defaults ───────────────────────────────────────────────────
 
-    /// <summary>Application-wide default theme. Defaults to <see cref="GlassTheme.Default"/>.</summary>
     public static GlassTheme DefaultTheme { get; set; } = GlassTheme.Default;
 
-    /// <summary>
-    /// When <c>true</c>, all dialogs use the theme's <see cref="GlassTheme.CornerRadius"/>
-    /// to render rounded corners.  Default is <c>false</c> (sharp, rectangular corners).
-    /// Override per-dialog with <see cref="GlassBuilder.RoundedCorners"/>.
-    /// </summary>
     public static bool UseRoundedCorners { get; set; } = false;
 
-    // ══════════════════════════════════════════════════════════════════════
-    // Classic synchronous overloads (drop-in for MessageBox.Show)
-    // ══════════════════════════════════════════════════════════════════════
 
     public static DialogResult Show(string message)
         => Core(null, message, string.Empty, MessageBoxIcon.None,
@@ -58,11 +44,7 @@ public static class GlassMessage
                                     MessageBoxDefaultButton defaultButton, GlassTheme theme)
         => Core(owner, message, title, icon, buttons, defaultButton, theme);
 
-    // ══════════════════════════════════════════════════════════════════════
-    // Async overloads
-    // ══════════════════════════════════════════════════════════════════════
 
-    /// <summary>Shows a non-blocking dialog; the returned task completes when the user closes it.</summary>
     public static Task<DialogResult> ShowAsync(
         string            message,
         string            title             = "",
@@ -82,19 +64,10 @@ public static class GlassMessage
         => CoreAsync(null, message, title, icon, buttons,
                      MessageBoxDefaultButton.Button1, theme, cancellationToken);
 
-    // ══════════════════════════════════════════════════════════════════════
-    // Fluent entry point
-    // ══════════════════════════════════════════════════════════════════════
 
-    /// <summary>Creates a <see cref="GlassBuilder"/> for fluent configuration.</summary>
     public static GlassBuilder Create(string message) => new GlassBuilder(message);
 
-    // ══════════════════════════════════════════════════════════════════════
-    // Internal core methods
-    // ══════════════════════════════════════════════════════════════════════
 
-    // Single source of truth for assembling a basic config. UseRoundedCorners is left null so the
-    // GlassDialog inherits GlassMessage.UseRoundedCorners at construction time.
     private static GlassDialogConfig BasicConfig(
         string message, string title, MessageBoxIcon icon, MessageBoxButtons buttons,
         MessageBoxDefaultButton defaultButton, GlassTheme theme, string[] customLabels)
@@ -127,7 +100,6 @@ public static class GlassMessage
     internal static GlassResult CoreEx(IWin32Window owner, GlassDialogConfig config)
     {
         config.Theme ??= DefaultTheme ?? GlassTheme.Default;
-        // If the builder left UseRoundedCorners null, read the global default now.
         config.UseRoundedCorners ??= UseRoundedCorners;
         using var dlg = new GlassDialog(config);
         var result    = owner == null ? dlg.ShowDialog() : dlg.ShowDialog(owner);

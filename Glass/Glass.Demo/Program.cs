@@ -12,7 +12,6 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        // Showcase the modern look: native Windows 11 rounded corners + an OS-matched theme.
         GlassMessage.UseRoundedCorners = true;
         GlassMessage.DefaultTheme      = GlassTheme.AutoDetect();
 
@@ -86,7 +85,6 @@ internal sealed class DemoForm : Form
 
         for (var i = 0; i < demos.Length; i++)
         {
-            // Column-major fill: first half goes down the left column, second half down the right.
             var col      = i / rows;
             var row      = i % rows;
             var captured = demos[i].Action;
@@ -110,11 +108,7 @@ internal sealed class DemoForm : Form
         Controls.Add(grid);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Demos — content is SHORT / MEDIUM / LONG, deliberately mixed and realistic.
-    // ═══════════════════════════════════════════════════════════════════════
 
-    // ── SHORT (1–2 lines) ─────────────────────────────────────────────────
 
     private static void Demo_Basic()
         => GlassMessage.Show(
@@ -212,7 +206,6 @@ internal sealed class DemoForm : Form
             .Buttons("Nice", "Again")
             .Show();
 
-    // ── MEDIUM (3–5 lines) ────────────────────────────────────────────────
 
     private static void Demo_Themes()
     {
@@ -351,14 +344,13 @@ internal sealed class DemoForm : Form
             .Default(MessageBoxDefaultButton.Button1)
             .ShowEx();
 
-        if (r.Button == DialogResult.No)   // "Secure account"
+        if (r.Button == DialogResult.No)
             _ = GlassMessage.Show(
                 "All other sessions have been signed out and a password reset link has been emailed " +
                 "to your recovery address.",
                 "Account Secured", MessageBoxIcon.Information);
     }
 
-    // ── LONG (6 + lines, rich context) ────────────────────────────────────
 
     private static void Demo_Countdown()
         => GlassMessage.Create(
@@ -589,7 +581,6 @@ internal sealed class DemoForm : Form
                 "Confirmed", MessageBoxIcon.Information);
     }
 
-    // ── Toast demos (always short — toasts are glanceable) ────────────────
 
     private static void Demo_Toast()
     {
