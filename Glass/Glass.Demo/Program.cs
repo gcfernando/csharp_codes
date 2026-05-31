@@ -1,7 +1,15 @@
+// -----------------------------------------------------------------------------
+//  Glass.Demo — a small WinForms gallery that exercises every Glass.Message
+//  feature. Each button maps to one Demo_* method below, so the app doubles as
+//  living documentation and a quick visual smoke test.
+//
+//  File        : Program.cs
+//  Developer   ::> Gehan Fernando
+// -----------------------------------------------------------------------------
+
 using System;
 using System.Drawing;
 using System.Windows.Forms;
-using Glass;
 
 namespace Glass.Demo;
 
@@ -12,28 +20,32 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
+        // Show off rounded corners and let the dialogs follow the OS light/dark theme.
         GlassMessage.UseRoundedCorners = true;
-        GlassMessage.DefaultTheme      = GlassTheme.AutoDetect();
+        GlassMessage.DefaultTheme = GlassTheme.AutoDetect();
 
         Application.Run(new DemoForm());
     }
 }
 
+/// <summary>The gallery window: a grid of buttons, one per feature demo.</summary>
 internal sealed class DemoForm : Form
 {
     public DemoForm()
     {
-        Text            = "Glass.Message v2.1 — Feature Gallery";
-        ClientSize      = new Size(680, 760);
-        StartPosition   = FormStartPosition.CenterScreen;
-        BackColor       = Color.FromArgb(18, 26, 46);
-        ForeColor       = Color.FromArgb(200, 215, 240);
-        Font            = new Font("Segoe UI", 10f);
+        Text = "Glass.Message v1.0 — Feature Gallery";
+        ClientSize = new Size(680, 760);
+        StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Color.FromArgb(18, 26, 46);
+        ForeColor = Color.FromArgb(200, 215, 240);
+        Font = new Font("Segoe UI", 10f);
         FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox     = false;
+        MaximizeBox = false;
         BuildUI();
     }
 
+    // Builds the button grid. The demo table is the single list to edit when
+    // adding or removing a feature showcase.
     private void BuildUI()
     {
         var demos = new (string Label, Action Action)[]
@@ -66,41 +78,50 @@ internal sealed class DemoForm : Form
             ("All Buttons + ShowEx Rich Result",          Demo_ShowEx),
         };
 
+        // Two equal columns; round the row count up so the last odd item still fits.
         const int cols = 2;
         var rows = (demos.Length + cols - 1) / cols;
 
         var grid = new TableLayoutPanel
         {
-            Dock            = DockStyle.Fill,
-            ColumnCount     = cols,
-            RowCount        = rows,
-            Padding         = new Padding(14, 10, 14, 14),
+            Dock = DockStyle.Fill,
+            ColumnCount = cols,
+            RowCount = rows,
+            Padding = new Padding(14, 10, 14, 14),
             CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
-            BackColor       = Color.Transparent,
+            BackColor = Color.Transparent,
         };
         for (var c = 0; c < cols; c++)
+        {
             _ = grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / cols));
+        }
+
         for (var r = 0; r < rows; r++)
+        {
             _ = grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / rows));
+        }
 
         for (var i = 0; i < demos.Length; i++)
         {
-            var col      = i / rows;
-            var row      = i % rows;
+            // Fill column by column (top-to-bottom, then the next column).
+            var col = i / rows;
+            var row = i % rows;
+            // Capture the action in a local so the click handler doesn't close over
+            // the loop variable.
             var captured = demos[i].Action;
             var btn = new Button
             {
-                Text      = demos[i].Label,
-                Dock      = DockStyle.Fill,
-                Margin    = col == 0 ? new Padding(0, 0, 6, 5) : new Padding(6, 0, 0, 5),
+                Text = demos[i].Label,
+                Dock = DockStyle.Fill,
+                Margin = col == 0 ? new Padding(0, 0, 6, 5) : new Padding(6, 0, 0, 5),
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.FromArgb(210, 230, 255),
                 BackColor = Color.FromArgb(22, 38, 68),
-                Cursor    = Cursors.Hand,
+                Cursor = Cursors.Hand,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding   = new Padding(8, 0, 0, 0),
+                Padding = new Padding(8, 0, 0, 0),
             };
-            btn.FlatAppearance.BorderColor       = Color.FromArgb(56, 100, 180);
+            btn.FlatAppearance.BorderColor = Color.FromArgb(56, 100, 180);
             btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(30, 52, 92);
             btn.Click += (s, e) => captured();
             grid.Controls.Add(btn, col, row);
@@ -108,8 +129,12 @@ internal sealed class DemoForm : Form
         Controls.Add(grid);
     }
 
+    // -------------------------------------------------------------------------
+    //  Feature demos. Each method is self-contained and shows one capability with
+    //  realistic, product-style copy.
+    // -------------------------------------------------------------------------
 
-
+    // The simplest case: a drop-in MessageBox-style call.
     private static void Demo_Basic()
         => GlassMessage.Show(
             "The selected printer 'HP LaserJet Pro M404dn' is offline.\n" +
@@ -119,7 +144,7 @@ internal sealed class DemoForm : Form
 
     private static void Demo_AutoTheme()
     {
-        var theme    = GlassTheme.AutoDetect();
+        var theme = GlassTheme.AutoDetect();
         var modeName = GlassTheme.IsSystemDark() ? "Dark" : "Light";
         _ = GlassMessage.Create(
                 $"Windows is currently in {modeName} mode, so Glass.Message selected its " +
@@ -145,9 +170,11 @@ internal sealed class DemoForm : Form
             .ShowEx();
 
         if (r.Button == DialogResult.OK && !string.IsNullOrWhiteSpace(r.InputText))
+        {
             _ = GlassMessage.Show(
                 $"Renamed to \"{r.InputText}\" successfully.",
                 "Rename Complete", MessageBoxIcon.Information);
+        }
     }
 
     private static void Demo_ProgressMarquee()
@@ -160,6 +187,7 @@ internal sealed class DemoForm : Form
             .Buttons("Cancel")
             .Show();
 
+    // Builds a throwaway 48×48 logo bitmap on the fly and uses it as the dialog icon.
     private static void Demo_CustomIcon()
     {
         using var bmp = new Bitmap(48, 48);
@@ -171,7 +199,7 @@ internal sealed class DemoForm : Form
                 System.Drawing.Brushes.White, new PointF(10, 6));
         }
         _ = GlassMessage.Create(
-                "Glass.Message v2.1 is active and your custom branding has been applied.\n\n" +
+                "Glass.Message v1.0 is active and your custom branding has been applied.\n\n" +
                 "Any 48×48 bitmap can be supplied as a dialog icon — perfect for product logos " +
                 "and per-tenant theming.")
             .Title("Glass.Message — Ready")
@@ -182,7 +210,7 @@ internal sealed class DemoForm : Form
 
     private static void Demo_Slide()
         => GlassMessage.Create(
-                "Glass.Message 2.1 is available.\n\n" +
+                "Glass.Message 1.0 is available.\n\n" +
                 "• Native Windows 11 rounded corners and shadow\n" +
                 "• Smoother, time-based open / close animations\n" +
                 "• Themed checkbox, password reveal eye + Caps Lock warning\n" +
@@ -205,7 +233,6 @@ internal sealed class DemoForm : Form
             .Animation(GlassAnimation.Scale)
             .Buttons("Nice", "Again")
             .Show();
-
 
     private static void Demo_Themes()
     {
@@ -272,10 +299,12 @@ internal sealed class DemoForm : Form
             .ShowEx();
 
         if (r.Button == DialogResult.OK)
+        {
             _ = GlassMessage.Show(
                 "Connected to sql-prod-01.contoso.com\n" +
                 $"Credential length: {r.InputText.Length} chars  ·  Session valid for 8 hours",
                 "Signed In", MessageBoxIcon.Information);
+        }
     }
 
     private static void Demo_Dropdown()
@@ -298,10 +327,12 @@ internal sealed class DemoForm : Form
             .ShowEx();
 
         if (r.Button == DialogResult.OK)
+        {
             _ = GlassMessage.Show(
                 $"Exporting as {r.InputText}\n" +
                 "Saved to: C:\\Users\\Gehan\\Downloads\\Annual_Report_Q4_2025",
                 "Export Complete", MessageBoxIcon.Information);
+        }
     }
 
     private static void Demo_Progress()
@@ -344,13 +375,16 @@ internal sealed class DemoForm : Form
             .Default(MessageBoxDefaultButton.Button1)
             .ShowEx();
 
+        // Three custom labels map onto Yes/No/Cancel, so "Secure account" (the
+        // second button) comes back as DialogResult.No.
         if (r.Button == DialogResult.No)
+        {
             _ = GlassMessage.Show(
                 "All other sessions have been signed out and a password reset link has been emailed " +
                 "to your recovery address.",
                 "Account Secured", MessageBoxIcon.Information);
+        }
     }
-
 
     private static void Demo_Countdown()
         => GlassMessage.Create(
@@ -390,10 +424,12 @@ internal sealed class DemoForm : Form
             .ShowEx();
 
         if (r.CheckBoxChecked)
+        {
             _ = GlassMessage.Show(
                 "Disk-space warnings for C:\\ have been suppressed.\n" +
                 "Re-enable them in Settings → System → Storage → Notifications.",
                 "Warning Suppressed", MessageBoxIcon.Information);
+        }
     }
 
     private static void Demo_Detail()
@@ -520,6 +556,7 @@ internal sealed class DemoForm : Form
             .ShowEx();
 
         if (r.Button == DialogResult.OK)
+        {
             _ = GlassMessage.Create(
                     $"Strategy: {r.InputText}\n" +
                     $"Auto-restart: {(r.CheckBoxChecked ? "Yes" : "No")}\n\n" +
@@ -529,8 +566,10 @@ internal sealed class DemoForm : Form
                 .Progress(12, 100)
                 .Buttons("Run in background")
                 .Show();
+        }
     }
 
+    // Awaits the dialog without blocking the UI thread, then reacts to the result.
     private static async void Demo_Async()
     {
         var r = await GlassMessage.ShowAsync(
@@ -574,26 +613,28 @@ internal sealed class DemoForm : Form
             .ShowEx();
 
         if (r.Button != DialogResult.Cancel)
+        {
             _ = GlassMessage.Show(
                 $"Action:              {(r.Button == DialogResult.OK ? "Uninstall" : "Repair")}\n" +
                 $"Remove preferences:  {(r.CheckBoxChecked ? "Yes" : "No")}\n\n" +
                 "The operation would begin here in a real application.",
                 "Confirmed", MessageBoxIcon.Information);
+        }
     }
-
 
     private static void Demo_Toast()
     {
         GlassToast.Show(new GlassToastOptions
         {
-            Message    = "Invoice_March_2026.pdf saved to SharePoint · Finance",
-            Title      = "Upload Complete",
-            Icon       = MessageBoxIcon.Information,
+            Message = "Invoice_March_2026.pdf saved to SharePoint · Finance",
+            Title = "Upload Complete",
+            Icon = MessageBoxIcon.Information,
             DurationMs = 4_000,
-            Position   = ToastPosition.BottomRight,
+            Position = ToastPosition.BottomRight,
         });
     }
 
+    // Fires three toasts in a row to show them auto-stacking at the same corner.
     private static void Demo_ToastStack()
     {
         GlassToast.Show("Build succeeded — 0 errors, 2 warnings",
@@ -608,22 +649,30 @@ internal sealed class DemoForm : Form
     {
         GlassToast.Show(new GlassToastOptions
         {
-            Message = "Top-left corner", Title = "Position", Icon = MessageBoxIcon.Information,
+            Message = "Top-left corner",
+            Title = "Position",
+            Icon = MessageBoxIcon.Information,
             Position = ToastPosition.TopLeft,
         });
         GlassToast.Show(new GlassToastOptions
         {
-            Message = "Top-right corner", Title = "Position", Icon = MessageBoxIcon.Information,
+            Message = "Top-right corner",
+            Title = "Position",
+            Icon = MessageBoxIcon.Information,
             Position = ToastPosition.TopRight,
         });
         GlassToast.Show(new GlassToastOptions
         {
-            Message = "Bottom-left corner", Title = "Position", Icon = MessageBoxIcon.Information,
+            Message = "Bottom-left corner",
+            Title = "Position",
+            Icon = MessageBoxIcon.Information,
             Position = ToastPosition.BottomLeft,
         });
         GlassToast.Show(new GlassToastOptions
         {
-            Message = "Bottom-centre", Title = "Position", Icon = MessageBoxIcon.Information,
+            Message = "Bottom-centre",
+            Title = "Position",
+            Icon = MessageBoxIcon.Information,
             Position = ToastPosition.BottomCenter,
         });
     }

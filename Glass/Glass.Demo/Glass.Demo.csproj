@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- ===========================================================================
+       Glass.Demo — WinForms feature gallery for Glass.Message.
+       Developer ::> Gehan Fernando
+       =========================================================================== -->
+
+  <!-- Application and language -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -8,6 +14,28 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>Glass.Demo</AssemblyName>
     <RootNamespace>Glass.Demo</RootNamespace>
+    <!-- Sample app — never produce a NuGet package from it. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- WinForms runtime configuration -->
+  <!-- These are baked in by ApplicationConfiguration.Initialize() in Main(). -->
+  <PropertyGroup>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
+  </PropertyGroup>
+
+  <!-- Build quality -->
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
   </PropertyGroup>
 
   <ItemGroup>

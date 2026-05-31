@@ -1,6 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- ===========================================================================
+       Glass.Message — class library project.
+       Developer ::> Gehan Fernando
+       =========================================================================== -->
+
+  <!-- Target frameworks & language -->
   <PropertyGroup>
+    <!-- Windows-only library; ship for .NET Framework 4.8.1 and modern .NET. -->
     <TargetFrameworks>net481;net8.0-windows;net9.0-windows;net10.0-windows</TargetFrameworks>
     <UseWindowsForms>true</UseWindowsForms>
     <OutputType>Library</OutputType>
@@ -8,27 +15,52 @@
     <RootNamespace>Glass</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <Deterministic>true</Deterministic>
     <Platforms>AnyCPU</Platforms>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
 
-    <!-- Suppress auto-generated AssemblyInfo so our Properties\AssemblyInfo.cs stays authoritative -->
+  <!-- Build quality and reproducibility -->
+  <PropertyGroup>
+    <!-- Reproducible binaries; CI sets $(CI) to also normalise source paths. -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- Faster incremental builds for downstream projects. -->
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+    <!-- Roslyn analyzers on, reported as warnings (build is not failed by them). -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <!-- Suppress auto-generated AssemblyInfo so Properties\AssemblyInfo.cs is authoritative. -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-
-    <!-- XML docs for IntelliSense -->
+    <!-- Emit XML docs for IntelliSense; 1591 = "missing doc" is silenced because
+         internal members are intentionally undocumented, and CA1416 because the
+         whole library is Windows-only by design. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- CA1416: suppress Windows-platform warnings — this library is Windows-only by design -->
     <NoWarn>$(NoWarn);1591;CA1416</NoWarn>
+  </PropertyGroup>
 
-    <!-- NuGet package metadata -->
+  <!-- Release-only optimisation -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <!-- NuGet package metadata -->
+  <PropertyGroup>
     <PackageId>Glass.Message</PackageId>
-    <Version>2.1.0</Version>
+    <Title>Glass.Message</Title>
+    <Version>1.0.0.0</Version>
     <Authors>Gehan Fernando</Authors>
     <Company>Gehan Fernando</Company>
+    <Product>Glass.Message</Product>
     <Description>Next-level modern replacement for MessageBox on Windows — Mica/Acrylic backdrop, auto dark/light theme, animations, toast notifications, async API, inline input, countdown, expandable detail, progress bar, RTL, and more. Drop-in compatible: GlassMessage.Show(...) compiles as-is.</Description>
     <PackageTags>messagebox dialog winforms windows11 windows10 fluent glass mica acrylic toast notification dark-mode dpi-aware</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Copyright>Copyright © 2026 Gehan Fernando</Copyright>
     <RepositoryType>git</RepositoryType>
+    <!-- Ship a debug-symbols (.snupkg) package alongside the main one. -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <!--
