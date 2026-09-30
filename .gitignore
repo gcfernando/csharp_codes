@@ -71,6 +71,8 @@
 /Spectrum/Spectrum/.vs
 /Spectrum/Spectrum/bin
 /Spectrum/Spectrum/obj
+/Spectrum/Spectrum.Tests/bin
+/Spectrum/Spectrum.Tests/obj
 /Spectrum/packages/System.Configuration.ConfigurationManager.10.0.1
 /Spectrum/.claude
 /Glass/.vs/Glass

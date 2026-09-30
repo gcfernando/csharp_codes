@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props"
@@ -110,6 +110,13 @@
   <ItemGroup>
     <Compile Include="Ambiance Theme.cs" />
     <Compile Include="Analyzer.cs" />
+    <Compile Include="BarBallistics.cs" />
+    <Compile Include="CaptureGate.cs" />
+    <Compile Include="Dsp\BandPlan.cs" />
+    <Compile Include="Dsp\BandSpectrumAnalyzer.cs" />
+    <Compile Include="Dsp\LevelScale.cs" />
+    <Compile Include="Dsp\RadixTwoFft.cs" />
+    <Compile Include="Dsp\SampleHistory.cs" />
     <Compile Include="Device.cs" />
 
     <Compile Include="FormAudioSpectrum.cs">

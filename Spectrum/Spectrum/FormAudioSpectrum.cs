@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using Spectrum.Dsp;
 
 namespace Spectrum;
 
@@ -12,7 +13,26 @@ public partial class FormAudioSpectrum : Form
     private const int BAR_COUNT = 83;
     private const int NOISE_GATE_THRESHOLD = 2;
 
+    // Default "Spectrum" (analyzer) mode presentation ballistics, all driven by elapsed time.
+    // Attack: a full-scale (72 dB) rise completes in 45 ms, about 1.5 analysis hops (~32 ms each), so the bar interpolates
+    // between analysis frames without adding more than about one hop of visible lag to transients.
+    // Release: exponential time constant; a natural decay of about 0.65 s to 10 % of the height.
+    // Peak hold: marker holds 300 ms, then falls at PeakDecayPerTick per 1/60 s, independent of the bar.
+    internal const int SPECTRUM_ATTACK_MS = 45;
+    internal const int SPECTRUM_RELEASE_MS = 280;
+    internal const int SPECTRUM_PEAK_HOLD_MS = 300;
+
+    // Frequency axis: landmark labels placed with the same logarithmic mapping as the bars (BandPlan).
+    private static readonly double[] s_axisLandmarksHz = { 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
+    private const float AXIS_LABEL_HEIGHT = 14f;   // design-time pixels at the 378 px reference height
+    private const int AXIS_LABEL_MIN_GAP = 4;
+
+    // Geometry used before the device sample rate is known (identical for every rate >= 41.8 kHz).
+    private static readonly BandPlan s_defaultPlan = BandPlan.CreateLogarithmic(BAR_COUNT, 20, 20000, 48000);
+
     private VerticalProgressBar[] _progressBars;
+    private Label[] _axisLabels;
+    private BandPlan _layoutPlan;
     private string _visualMode;
     private readonly byte[] _spectrumBuffer;
     private readonly byte[] _applyBuffer;
@@ -90,6 +110,24 @@ public partial class FormAudioSpectrum : Form
                 _progressBars[i] = progress;
                 ambiance_ThemeSpectrum.Controls.Add(progress);
             }
+
+            _axisLabels = new Label[s_axisLandmarksHz.Length];
+            for (var i = 0; i < _axisLabels.Length; i++)
+            {
+                var hz = s_axisLandmarksHz[i];
+                var label = new Label
+                {
+                    AutoSize = true,
+                    BackColor = Color.Transparent,
+                    ForeColor = Color.FromArgb(150, 150, 150),
+                    Font = new Font("Segoe UI", 7f),
+                    Text = hz >= 1000 ? $"{hz / 1000:0.#}k" : $"{hz:0}",
+                    Name = $"AxisLabel_{hz:0}",
+                };
+
+                _axisLabels[i] = label;
+                ambiance_ThemeSpectrum.Controls.Add(label);
+            }
         }
         finally
         {
@@ -109,7 +147,8 @@ public partial class FormAudioSpectrum : Form
 
         var scaleY = (float)ch / 378f;
         var startY = Math.Max(0, (int)Math.Round(50f * scaleY));
-        var barH   = Math.Max(10, ch - startY - Math.Max(0, (int)Math.Round(8f * scaleY)));
+        var labelH = Math.Max(10, (int)Math.Round(AXIS_LABEL_HEIGHT * scaleY));
+        var barH   = Math.Max(10, ch - startY - Math.Max(0, (int)Math.Round(8f * scaleY)) - labelH);
 
         // Keep a margin on both sides that scales with the container width.
         // Float stride within the available area so all 83 bars fit exactly, with no side overflow.
@@ -127,10 +166,43 @@ public partial class FormAudioSpectrum : Form
                 _progressBars[i].Location = new Point(x, startY);
                 _progressBars[i].Size     = new Size(Math.Max(2, nextX - x), barH);
             }
+
+            LayoutAxisLabels(marginX, strideF, startY + barH + 1, cw);
         }
         finally
         {
             ambiance_ThemeSpectrum.ResumeLayout(false);
+        }
+    }
+
+    private void LayoutAxisLabels(int marginX, float strideF, int labelY, int containerWidth)
+    {
+        if (_axisLabels == null) return;
+
+        var plan = _analyzer?.CurrentBandPlan ?? s_defaultPlan;
+        _layoutPlan = plan;
+
+        var previousRight = int.MinValue;
+        for (var i = 0; i < _axisLabels.Length; i++)
+        {
+            var label = _axisLabels[i];
+            var hz = s_axisLandmarksHz[i];
+
+            // Never label frequencies the analysis does not cover (e.g. above Nyquist on a low-rate device).
+            var inRange = hz >= plan.MinHz && hz <= plan.MaxHz;
+
+            // Same mapping as the bars: bar i spans [i, i+1) in plan position units.
+            var centerX = marginX + (int)Math.Round(plan.FrequencyToPosition(hz) * strideF);
+            var w = label.PreferredWidth;
+            var left = Math.Max(0, Math.Min(containerWidth - w, centerX - (w / 2)));
+
+            // Skip labels that would collide with the previous one on narrow windows.
+            var visible = inRange && left >= previousRight + AXIS_LABEL_MIN_GAP;
+            label.Visible = visible;
+            if (!visible) continue;
+
+            label.Location = new Point(left, labelY);
+            previousRight = left + w;
         }
     }
 
@@ -171,11 +243,11 @@ public partial class FormAudioSpectrum : Form
         var spectrum = e.Spectrumdata;
         if (spectrum == null || spectrum.Count == 0) return;
 
+        bool postNeeded;
         lock (_updateLock)
         {
-            if (_updatePending) return;
-            _updatePending = true;
-
+            // Latest frame wins: always overwrite the pending buffer so the UI never applies a stale frame,
+            // but post at most one UI update at a time.
             var count = Math.Min(spectrum.Count, BAR_COUNT);
             for (var i = 0; i < count; i++)
             {
@@ -184,7 +256,12 @@ public partial class FormAudioSpectrum : Form
             }
             for (var i = count; i < BAR_COUNT; i++)
                 _spectrumBuffer[i] = 0;
+
+            postNeeded = !_updatePending;
+            _updatePending = true;
         }
+
+        if (!postNeeded) return;
 
         if (InvokeRequired)
             _ = BeginInvoke(new Action(ApplySpectrumToUI));
@@ -201,10 +278,17 @@ public partial class FormAudioSpectrum : Form
             Buffer.BlockCopy(_spectrumBuffer, 0, _applyBuffer, 0, BAR_COUNT);
         }
 
+        // An update posted before the form was cleaned up can still be dispatched afterwards.
+        if (_isDisposed || _progressBars == null) return;
+
         for (var i = 0; i < BAR_COUNT; i++)
         {
             _progressBars[i].SetTargetValueUI(_applyBuffer[i]);
         }
+
+        var plan = _analyzer?.CurrentBandPlan;
+        if (plan != null && !ReferenceEquals(plan, _layoutPlan))
+            RecalculateBarLayout();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -282,9 +366,9 @@ public partial class FormAudioSpectrum : Form
 
             default:
                 progress.UseAsymmetricBallistics = true;
-                progress.ResponseTimeMs = 110;
-                progress.ReleaseTimeMs = 280;
-                progress.PeakHoldMilliseconds = 300;
+                progress.ResponseTimeMs = SPECTRUM_ATTACK_MS;
+                progress.ReleaseTimeMs = SPECTRUM_RELEASE_MS;
+                progress.PeakHoldMilliseconds = SPECTRUM_PEAK_HOLD_MS;
                 break;
         }
     }
@@ -317,6 +401,18 @@ public partial class FormAudioSpectrum : Form
                 _progressBars[i] = null;
             }
             _progressBars = null;
+        }
+
+        if (_axisLabels != null)
+        {
+            for (var i = 0; i < _axisLabels.Length; i++)
+            {
+                var font = _axisLabels[i]?.Font;
+                _axisLabels[i]?.Dispose();
+                font?.Dispose();
+                _axisLabels[i] = null;
+            }
+            _axisLabels = null;
         }
     }
 }

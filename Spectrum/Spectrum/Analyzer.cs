@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using Spectrum.Dsp;
 using Un4seen.Bass;
 using Un4seen.BassWasapi;
 using ElapsedEventArgs = System.Timers.ElapsedEventArgs;
@@ -22,31 +23,42 @@ public sealed class Analyzer : IDisposable
 {
     public static event OnChangeHandler OnChange;
 
-    private const int FFT_LEN = 16384;
-    private const int FFT_HALF_BINS = FFT_LEN / 2;
-    private const int FFT_SIZE = FFT_HALF_BINS;
     private const int LINES = 83;
 
-    private const float MIN_HZ = 20f;
-    private const float MAX_HZ = 20000f;
+    // Band plan: 83 log-spaced bands whose centres run from 20 Hz to 20 kHz (about 1/8.3 octave each).
+    private const double FIRST_CENTER_HZ = 20.0;
+    private const double LAST_CENTER_HZ = 20000.0;
 
+    // Analysis hop: one STFT frame per tick. With the default 15.6 ms Windows timer resolution the 25 ms
+    // one-shot timer actually fires every ~31.7 ms (measured), i.e. ~31.6 frames/s. The hop must stay <= half
+    // the shortest window (4096 samples = 85 ms at 48 kHz) so the Hann-windowed frames cover every sample.
     private const int TIMER_INTERVAL_MS = 25;
     private const int HANG_THRESHOLD = 8;
     private const int SILENCE_FRAMES_REQUIRED = 4;
 
-    private const double RMS_MULTIPLIER = 3.0 * 255.0;
-    private const double RMS_OFFSET = 4.0;
+    // WASAPI capture buffer and callback period. A 10 ms period gives ~100 callbacks per second
+    // (measured on loopback); the previous 50 ms period gave ~20 per second, so every other 25 ms analysis
+    // tick re-analysed stale audio and transients were quantized to 50 ms.
+    private const float WASAPI_BUFFER_SECONDS = 1f;
+    private const float WASAPI_PERIOD_SECONDS = 0.01f;
 
-    private const float SMOOTHING_FACTOR = 0.20f;
-
-    private const float SILENCE_FADE_MULT = 0.80f;
-    private const float SILENCE_SNAP_TO_ZERO = 0.50f;
+    // Sample history kept for analysis, as a multiple of the longest FFT (headroom for the lock-free snapshot).
+    private const int HISTORY_CAPACITY_FACTOR = 4;
 
     private readonly Timer _timer;
-    private readonly float[] _fft;
-    private int[] _bandEdges;
-    private readonly float[] _smoothedSpectrum;
     private readonly byte[] _spectrumData;
+    private readonly double[] _bandPower;
+
+    // Current capture stream (analysis state + the history frame count when it started), replaced as a whole
+    // through this single volatile reference each time capture is (re)started.
+    private volatile CaptureStream _stream;
+
+    // Timer-thread only: silence / stall / gap decisions per tick.
+    private readonly CaptureGate _gate = new(SILENCE_FRAMES_REQUIRED, HANG_THRESHOLD);
+
+    // 1 while a tick is running. Device recovery restarts the timer from the UI thread, which could otherwise
+    // start a second tick while one is still publishing through the shared buffers.
+    private int _tickActive;
 
     private readonly byte[] _fireData;
     private readonly OnChangeEventArgs _fireEventArgs;
@@ -59,18 +71,17 @@ public sealed class Analyzer : IDisposable
     private NAudio.CoreAudioApi.MMDeviceEnumerator _mmEnumerator;
     private readonly DeviceNotificationClient _deviceNotificationClient;
 
-    private int _lastLevel;
-    private int _hangCounter;
-    private int _consecutiveZeroLevels;
 
     private bool _initialized;
     private volatile bool _disposed;
-    private bool _silenceMode;
     private volatile bool _recovering; // set while device recovery is pending on UI thread
 
     private int _sampleRate = 48000; // updated from WASAPI info after init
 
     public int SelectIndex { get; set; }
+
+    /// <summary>Band plan currently used for analysis (depends on the device sample rate).</summary>
+    internal BandPlan CurrentBandPlan => _stream?.State.Engine.Plan;
 
     public Analyzer()
     {
@@ -78,14 +89,13 @@ public sealed class Analyzer : IDisposable
 
         _syncContext = SynchronizationContext.Current;
 
-        _fft = new float[FFT_SIZE];
         _spectrumData = new byte[LINES];
-        _smoothedSpectrum = new float[LINES];
+        _bandPower = new double[LINES];
 
         _fireData = new byte[LINES];
         _fireEventArgs = new OnChangeEventArgs(_fireData);
 
-        _bandEdges = BuildBandsUpper_LogHz(LINES, FFT_SIZE, _sampleRate, MIN_HZ, MAX_HZ);
+        _stream = new CaptureStream(AnalysisState.Create(_sampleRate, 2));
 
         _process = Process;
 
@@ -136,50 +146,6 @@ public sealed class Analyzer : IDisposable
         {
             _recovering = false;
         }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int[] BuildBandsUpper_LogHz(int lines, int maxBin, int sampleRate, float minHz, float maxHz)
-    {
-        var upper = new int[lines];
-
-        var nyquist = sampleRate * 0.5f;
-        var lo = Math.Max(1f, minHz);
-        var hi = Math.Max(lo + 1f, Math.Min(maxHz, nyquist));
-
-        var logLo = Math.Log10(lo);
-        var logHi = Math.Log10(hi);
-        var denom = Math.Max(1, lines - 1);
-
-        var prev = 0;
-
-        for (var x = 0; x < lines; x++)
-        {
-            var t = (double)x / denom;
-            var hz = Math.Pow(10.0, logLo + ((logHi - logLo) * t));
-
-            var bin = (int)Math.Round(hz * FFT_LEN / sampleRate);
-
-            if (bin < 1)
-            {
-                bin = 1;
-            }
-
-            if (bin > maxBin)
-            {
-                bin = maxBin;
-            }
-
-            if (bin <= prev)
-            {
-                bin = Math.Min(prev + 1, maxBin);
-            }
-
-            upper[x] = bin;
-            prev = bin;
-        }
-
-        return upper;
     }
 
     private List<Device> DeviceList()
@@ -249,8 +215,8 @@ public sealed class Analyzer : IDisposable
                     0,
                     0,
                     BASSWASAPIInit.BASS_WASAPI_AUTOFORMAT | BASSWASAPIInit.BASS_WASAPI_BUFFER,
-                    1f,
-                    0.05f,
+                    WASAPI_BUFFER_SECONDS,
+                    WASAPI_PERIOD_SECONDS,
                     _process,
                     IntPtr.Zero);
 
@@ -261,6 +227,7 @@ public sealed class Analyzer : IDisposable
                     return;
                 }
 
+                var channels = 2;
                 try
                 {
                     var info = BassWasapi.BASS_WASAPI_GetInfo();
@@ -268,13 +235,27 @@ public sealed class Analyzer : IDisposable
                     {
                         _sampleRate = info.freq;
                     }
+
+                    if (info.chans > 0)
+                    {
+                        channels = info.chans;
+                    }
                 }
                 catch
                 {
                     _sampleRate = 48000;
                 }
 
-                _bandEdges = BuildBandsUpper_LogHz(LINES, FFT_SIZE, _sampleRate, MIN_HZ, MAX_HZ);
+                // New history only when the device format changed; the capture callback and the analysis thread
+                // both pick it up through the single volatile reference. Reusing the state avoids ~2.5 MB of
+                // reallocation per device recovery.
+                var state = _stream?.State;
+                if (state == null || state.SampleRate != _sampleRate || state.History.Channels != channels)
+                {
+                    state = AnalysisState.Create(_sampleRate, channels);
+                }
+
+                _stream = new CaptureStream(state);
 
                 _initialized = true;
             }
@@ -291,8 +272,13 @@ public sealed class Analyzer : IDisposable
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int Process(IntPtr buffer, int length, IntPtr user) => length;
+    // WASAPI capture callback (BASSWASAPI thread): copy the float frames into the lock-free history only.
+    // No allocation, locking, logging or analysis happens here.
+    private int Process(IntPtr buffer, int length, IntPtr user)
+    {
+        _stream?.State.History.Write(buffer, length);
+        return length;
+    }
 
     public void Free()
     {
@@ -312,39 +298,37 @@ public sealed class Analyzer : IDisposable
             return;
         }
 
+        if (Interlocked.CompareExchange(ref _tickActive, 1, 0) != 0)
+        {
+            return; // a tick is still running (only possible around device recovery); its finally restarts the timer
+        }
+
         try
         {
-            var ret = BassWasapi.BASS_WASAPI_GetData(_fft, (int)BASSData.BASS_DATA_FFT16384);
-
-            if (ret < 0)
-            {
-                FadeSilenceAndFire();
-                return;
-            }
-
+            var stream = _stream;
+            var state = stream.State;
             var level = BassWasapi.BASS_WASAPI_GetLevel();
+            var decision = _gate.Next(level, state.History.TotalFrames, stream, stream.StartFrame);
 
-            if (level == 0)
+            switch (decision.Action)
             {
-                _consecutiveZeroLevels++;
-                if (_consecutiveZeroLevels >= SILENCE_FRAMES_REQUIRED)
-                {
-                    FadeSilenceAndFire();
-                    HandleDeviceHang(level);
-                    return;
-                }
-            }
-            else
-            {
-                _consecutiveZeroLevels = 0;
-                _silenceMode = false;
+                case CaptureAction.Analyze:
+                    AnalyzeAndFire(state);
+                    break;
+                case CaptureAction.PublishSilence:
+                    PublishSilence();
+                    break;
             }
 
-            ProcessFFTDataAndFire();
-            HandleDeviceHang(level);
+            if (decision.RecoverDevice)
+            {
+                RecoverHungDevice();
+            }
         }
         finally
         {
+            Volatile.Write(ref _tickActive, 0);
+
             if (!_disposed && !_recovering)
             {
                 try
@@ -354,93 +338,29 @@ public sealed class Analyzer : IDisposable
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void FadeSilenceAndFire()
+    // Silence: publish the floor and let the presentation release ballistics (time-based) decay the bars.
+    private void PublishSilence()
     {
-        _silenceMode = true;
+        Array.Clear(_spectrumData, 0, LINES);
+        FireOnChange();
+    }
 
-        var anyNonZero = false;
+    private void AnalyzeAndFire(AnalysisState state)
+    {
+        var frames = state.Engine.RequiredFrames;
+        if (!state.History.TryCopyLatest(state.Snapshot, frames, out _, _gate.GapEndFrame))
+        {
+            return; // producer lapped the reader: keep the previous complete frame rather than publish a torn one
+        }
+
+        state.Engine.Analyze(state.Snapshot, frames, _bandPower);
 
         for (var i = 0; i < LINES; i++)
         {
-            _smoothedSpectrum[i] *= SILENCE_FADE_MULT;
-
-            if (_smoothedSpectrum[i] < SILENCE_SNAP_TO_ZERO)
-            {
-                _smoothedSpectrum[i] = 0;
-            }
-
-            var v = (byte)_smoothedSpectrum[i];
-            _spectrumData[i] = v;
-
-            if (v != 0)
-            {
-                anyNonZero = true;
-            }
+            _spectrumData[i] = LevelScale.ToDisplayByte(LevelScale.PowerToDb(_bandPower[i]));
         }
 
         FireOnChange();
-
-        if (!anyNonZero)
-        {
-            _silenceMode = false;
-            _consecutiveZeroLevels = 0;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ProcessFFTDataAndFire()
-    {
-        var b0 = 0;
-        const int fftOffset = 1;
-
-        var hasSignal = false;
-
-        for (var x = 0; x < LINES; x++)
-        {
-            var b1 = _bandEdges[x];
-            if (b1 >= FFT_SIZE)
-            {
-                b1 = FFT_SIZE - 1;
-            }
-
-            if (b1 <= b0)
-            {
-                b1 = b0 + 1;
-            }
-
-            var sum = 0.0;
-            var n = b1 - b0;
-
-            for (var i = b0; i < b1; i++)
-            {
-                var v = _fft[fftOffset + i];
-                sum += v * v;
-            }
-
-            b0 = b1;
-
-            var rms = n > 0 ? Math.Sqrt(sum / n) : 0.0;
-            var rawValue = (int)((Math.Sqrt(rms) * RMS_MULTIPLIER) - RMS_OFFSET);
-
-            var clamped = rawValue > 255 ? 255 : (rawValue < 0 ? 0 : rawValue);
-
-            _smoothedSpectrum[x] = (_smoothedSpectrum[x] * SMOOTHING_FACTOR)
-                                 + (clamped * (1.0f - SMOOTHING_FACTOR));
-
-            var finalValue = (byte)_smoothedSpectrum[x];
-            _spectrumData[x] = finalValue;
-
-            if (finalValue > 0)
-            {
-                hasSignal = true;
-            }
-        }
-
-        if (hasSignal || !_silenceMode)
-        {
-            FireOnChange();
-        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -451,47 +371,34 @@ public sealed class Analyzer : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void HandleDeviceHang(int level)
+    // Hang detection lives in CaptureGate: capture stalled while the level stays frozen at a non-zero value.
+    // (The original rule, "same non-zero level for 9 ticks", fired on every steady signal and reset the device
+    // every ~0.3 s during test tones and sustained notes.)
+    private void RecoverHungDevice()
     {
-        if (level == _lastLevel && level != 0)
-        {
-            _hangCounter++;
-        }
-        else
-        {
-            _hangCounter = 0;
-        }
+        _recovering = true;
 
-        _lastLevel = level;
-
-        if (_hangCounter > HANG_THRESHOLD)
+        var ctx = _syncContext;
+        if (ctx != null)
         {
-            _hangCounter = 0;
-            _consecutiveZeroLevels = 0;
-            _recovering = true;
-
-            var ctx = _syncContext;
-            if (ctx != null)
+            ctx.Post(_ =>
             {
-                ctx.Post(_ =>
-                {
-                    if (_disposed)
-                    { _recovering = false; return; }
-                    Free();
-                    _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
-                    _initialized = false;
-                    _recovering = false;
-                    Enable(true);
-                }, null);
-            }
-            else
-            {
+                if (_disposed)
+                { _recovering = false; return; }
                 Free();
                 _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
                 _initialized = false;
                 _recovering = false;
                 Enable(true);
-            }
+            }, null);
+        }
+        else
+        {
+            Free();
+            _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
+            _initialized = false;
+            _recovering = false;
+            Enable(true);
         }
     }
 
@@ -526,6 +433,43 @@ public sealed class Analyzer : IDisposable
         _ = Bass.BASS_Free();
 
         OnChange = null;
+    }
+
+    private sealed class CaptureStream
+    {
+        public CaptureStream(AnalysisState state)
+        {
+            State = state;
+            StartFrame = state.History.TotalFrames;
+        }
+
+        public AnalysisState State { get; }
+        public long StartFrame { get; }
+    }
+
+    private sealed class AnalysisState
+    {
+        private AnalysisState(BandSpectrumAnalyzer engine, SampleHistory history)
+        {
+            Engine = engine;
+            History = history;
+            Snapshot = new float[engine.RequiredFrames * history.Channels];
+        }
+
+        public BandSpectrumAnalyzer Engine { get; }
+        public SampleHistory History { get; }
+        public int SampleRate => Engine.Plan.SampleRate;
+
+        // Owned by the analysis (timer) thread.
+        public float[] Snapshot { get; }
+
+        public static AnalysisState Create(int sampleRate, int channels)
+        {
+            var plan = BandPlan.CreateLogarithmic(LINES, FIRST_CENTER_HZ, LAST_CENTER_HZ, sampleRate);
+            var engine = new BandSpectrumAnalyzer(plan, channels);
+            var history = new SampleHistory(channels, engine.RequiredFrames * HISTORY_CAPACITY_FACTOR);
+            return new AnalysisState(engine, history);
+        }
     }
 
     private sealed class DeviceNotificationClient : NAudio.CoreAudioApi.Interfaces.IMMNotificationClient
