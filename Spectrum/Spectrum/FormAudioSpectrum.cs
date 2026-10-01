@@ -16,10 +16,10 @@ public partial class FormAudioSpectrum : Form
     // Default "Spectrum" (analyzer) mode presentation ballistics, all driven by elapsed time.
     // Attack: a full-scale (72 dB) rise completes in 45 ms, about 1.5 analysis hops (~32 ms each), so the bar interpolates
     // between analysis frames without adding more than about one hop of visible lag to transients.
-    // Release: exponential time constant; a natural decay of about 0.65 s to 10 % of the height.
+    // Release: exponential time constant; a natural decay of about 0.9 s to 10 % of the height.
     // Peak hold: marker holds 300 ms, then falls at PeakDecayPerTick per 1/60 s, independent of the bar.
     internal const int SPECTRUM_ATTACK_MS = 45;
-    internal const int SPECTRUM_RELEASE_MS = 280;
+    internal const int SPECTRUM_RELEASE_MS = 380;
     internal const int SPECTRUM_PEAK_HOLD_MS = 300;
 
     // Frequency axis: landmark labels placed with the same logarithmic mapping as the bars (BandPlan).
@@ -27,13 +27,40 @@ public partial class FormAudioSpectrum : Form
     private const float AXIS_LABEL_HEIGHT = 14f;   // design-time pixels at the 378 px reference height
     private const int AXIS_LABEL_MIN_GAP = 4;
 
+    // Level (dB) axis: landmark labels placed on both sides of the bars, mapped with the same
+    // LevelScale.Normalize used to size the bars, so a label always lines up with the bar height
+    // it names. Present from startup, like the frequency axis.
+    private static readonly double[] s_axisLandmarksDb = { 0, -12, -24, -36, -48, -60, -72 };
+
+    // Reference-scale tick lines drawn inside every bar (excludes the 0/-72 extremes, which already
+    // coincide with each bar's own top/bottom border).
+    private static readonly float[] s_gridlineLevels = BuildGridlineLevels();
+
+    private static float[] BuildGridlineLevels()
+    {
+        var levels = new float[s_axisLandmarksDb.Length - 2];
+        for (var i = 1; i < s_axisLandmarksDb.Length - 1; i++)
+            levels[i - 1] = (float)LevelScale.Normalize(s_axisLandmarksDb[i]);
+        return levels;
+    }
+
     // Geometry used before the device sample rate is known (identical for every rate >= 41.8 kHz).
     private static readonly BandPlan s_defaultPlan = BandPlan.CreateLogarithmic(BAR_COUNT, 20, 20000, 48000);
 
     private VerticalProgressBar[] _progressBars;
     private Label[] _axisLabels;
+    private Label[] _dbAxisLabelsLeft;
+    private Label[] _dbAxisLabelsRight;
+
+    // Mirrored copies of the dB labels, used only in Center/Mirror mode: those modes fill the bar
+    // symmetrically about its vertical middle, so most landmark values occur at two heights (equidistant
+    // above and below centre) instead of one. Hidden/unused in every other mode.
+    private Label[] _dbAxisLabelsLeftMirror;
+    private Label[] _dbAxisLabelsRightMirror;
+
     private BandPlan _layoutPlan;
     private string _visualMode;
+    private string _barTheme;
     private readonly byte[] _spectrumBuffer;
     private readonly byte[] _applyBuffer;
 
@@ -70,6 +97,9 @@ public partial class FormAudioSpectrum : Form
         _visualMode = ConfigurationManager.AppSettings["Mode"];
         _visualMode = string.IsNullOrWhiteSpace(_visualMode) ? "Spectrum" : _visualMode.Trim();
 
+        _barTheme = ConfigurationManager.AppSettings["Theme"];
+        _barTheme = string.IsNullOrWhiteSpace(_barTheme) ? "ClassicSmooth" : _barTheme.Trim();
+
         InitializeBarsOptimized(_visualMode);
         CenterToScreen();
 
@@ -86,6 +116,7 @@ public partial class FormAudioSpectrum : Form
     private void InitializeBarsOptimized(string visualMode)
     {
         _progressBars = new VerticalProgressBar[BAR_COUNT];
+        var theme = BarColorThemes.Resolve(_barTheme);
 
         ambiance_ThemeSpectrum.SuspendLayout();
         try
@@ -102,10 +133,12 @@ public partial class FormAudioSpectrum : Form
                     Tag = $"{visualMode}|{i + 1}",
                     Size = new Size(14, 320),
                     Location = new Point(11 + i * 13, 50),
-                    Visible = true
+                    Visible = true,
+                    GridlineLevels = s_gridlineLevels
                 };
 
                 ApplyMeterPresetOptimized(progress, visualMode);
+                ApplyColorThemeOptimized(progress, theme);
 
                 _progressBars[i] = progress;
                 ambiance_ThemeSpectrum.Controls.Add(progress);
@@ -128,6 +161,30 @@ public partial class FormAudioSpectrum : Form
                 _axisLabels[i] = label;
                 ambiance_ThemeSpectrum.Controls.Add(label);
             }
+
+            _dbAxisLabelsLeft = new Label[s_axisLandmarksDb.Length];
+            _dbAxisLabelsRight = new Label[s_axisLandmarksDb.Length];
+            _dbAxisLabelsLeftMirror = new Label[s_axisLandmarksDb.Length];
+            _dbAxisLabelsRightMirror = new Label[s_axisLandmarksDb.Length];
+            for (var i = 0; i < s_axisLandmarksDb.Length; i++)
+            {
+                var db = s_axisLandmarksDb[i];
+                var text = db.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+
+                var left = CreateDbAxisLabel(text, $"DbAxisLabelLeft_{text}");
+                var right = CreateDbAxisLabel(text, $"DbAxisLabelRight_{text}");
+                var leftMirror = CreateDbAxisLabel(text, $"DbAxisLabelLeftMirror_{text}");
+                var rightMirror = CreateDbAxisLabel(text, $"DbAxisLabelRightMirror_{text}");
+
+                _dbAxisLabelsLeft[i] = left;
+                _dbAxisLabelsRight[i] = right;
+                _dbAxisLabelsLeftMirror[i] = leftMirror;
+                _dbAxisLabelsRightMirror[i] = rightMirror;
+                ambiance_ThemeSpectrum.Controls.Add(left);
+                ambiance_ThemeSpectrum.Controls.Add(right);
+                ambiance_ThemeSpectrum.Controls.Add(leftMirror);
+                ambiance_ThemeSpectrum.Controls.Add(rightMirror);
+            }
         }
         finally
         {
@@ -135,6 +192,38 @@ public partial class FormAudioSpectrum : Form
         }
 
         RecalculateBarLayout();
+    }
+
+    private static Label CreateDbAxisLabel(string text, string name) => new()
+    {
+        AutoSize = true,
+        BackColor = Color.Transparent,
+        ForeColor = Color.FromArgb(150, 150, 150),
+        Font = new Font("Segoe UI", 7f),
+        Text = text,
+        Name = name,
+    };
+
+    private int GetMaxDbAxisLabelWidth()
+    {
+        var max = 0;
+        if (_dbAxisLabelsLeft != null)
+        {
+            foreach (var label in _dbAxisLabelsLeft)
+                if (label != null) max = Math.Max(max, label.PreferredWidth);
+        }
+        return max;
+    }
+
+    private int GetMaxDbAxisLabelHeight()
+    {
+        var max = 0;
+        if (_dbAxisLabelsLeft != null)
+        {
+            foreach (var label in _dbAxisLabelsLeft)
+                if (label != null) max = Math.Max(max, label.PreferredHeight);
+        }
+        return max;
     }
 
     private void RecalculateBarLayout()
@@ -146,13 +235,22 @@ public partial class FormAudioSpectrum : Form
         if (cw <= 0 || ch <= 0) return;
 
         var scaleY = (float)ch / 378f;
-        var startY = Math.Max(0, (int)Math.Round(50f * scaleY));
+        var dbLabelH = Math.Max(0, GetMaxDbAxisLabelHeight());
+        var dbLabelHalf = (dbLabelH + 1) / 2;
+        var baseStartY = Math.Max(0, (int)Math.Round(50f * scaleY));
+        var startY = Math.Max(0, baseStartY + dbLabelHalf);
         var labelH = Math.Max(10, (int)Math.Round(AXIS_LABEL_HEIGHT * scaleY));
-        var barH   = Math.Max(10, ch - startY - Math.Max(0, (int)Math.Round(8f * scaleY)) - labelH);
+        var bottomReserve = Math.Max(0, (int)Math.Round(8f * scaleY)) + dbLabelHalf + AXIS_LABEL_MIN_GAP + labelH;
+        var barH   = Math.Max(10, ch - startY - bottomReserve);
+        var axisLabelY = startY + barH + dbLabelHalf + AXIS_LABEL_MIN_GAP;
 
-        // Keep a margin on both sides that scales with the container width.
+        // Keep a margin on both sides that scales with the container width, widened as needed so the
+        // dB axis labels have room to sit left/right of the bars without overlapping them.
+        var baseMarginX = Math.Max(4, (int)Math.Round(11f * (float)cw / 1184f));
+        var dbLabelReserve = GetMaxDbAxisLabelWidth() + 2 * AXIS_LABEL_MIN_GAP;
+        var marginX = Math.Max(baseMarginX, dbLabelReserve);
+
         // Float stride within the available area so all 83 bars fit exactly, with no side overflow.
-        var marginX = Math.Max(4, (int)Math.Round(11f * (float)cw / 1184f));
         var availW  = cw - 2 * marginX;
         var strideF = (float)availW / BAR_COUNT;
 
@@ -167,7 +265,26 @@ public partial class FormAudioSpectrum : Form
                 _progressBars[i].Size     = new Size(Math.Max(2, nextX - x), barH);
             }
 
-            LayoutAxisLabels(marginX, strideF, startY + barH + 1, cw);
+            LayoutAxisLabels(marginX, strideF, axisLabelY, cw);
+
+            // Line labels up with the bar's actual painted fill area, not its full control bounds: OnPaint
+            // insets the fill by BrickPadding on every side, so the dB axis must use the same inset.
+            var fillPadding = _progressBars.Length > 0 ? _progressBars[0].BrickPadding : 0;
+            var fillTop = startY + fillPadding;
+            var fillH = Math.Max(1, barH - 2 * fillPadding);
+            var topBound = Math.Max(0, startY - dbLabelHalf);
+            var bottomBound = axisLabelY - AXIS_LABEL_MIN_GAP;
+
+            if (IsSymmetricFillMode(_visualMode, out var invertedFromCenter))
+            {
+                LayoutDbAxisLabelsSymmetric(marginX, fillTop, fillH, cw, topBound, bottomBound, invertedFromCenter);
+            }
+            else
+            {
+                HideDbAxisLabels(_dbAxisLabelsLeftMirror);
+                HideDbAxisLabels(_dbAxisLabelsRightMirror);
+                LayoutDbAxisLabels(marginX, fillTop, fillH, cw, topBound, bottomBound);
+            }
         }
         finally
         {
@@ -203,6 +320,163 @@ public partial class FormAudioSpectrum : Form
 
             label.Location = new Point(left, labelY);
             previousRight = left + w;
+        }
+    }
+
+    // Level (dB) axis: positions mirror LevelScale.Normalize so a label's vertical centre lines up with the
+    // bar height that dB value would produce (0 dBFS at the top, -72 dBFS floor at the bottom).
+    private void LayoutDbAxisLabels(int marginX, int startY, int barH, int containerWidth, int topBound, int bottomBound)
+    {
+        if (_dbAxisLabelsLeft == null || _dbAxisLabelsRight == null) return;
+
+        var previousBottomLeft = int.MinValue;
+        var previousBottomRight = int.MinValue;
+
+        for (var i = 0; i < s_axisLandmarksDb.Length; i++)
+        {
+            var db = s_axisLandmarksDb[i];
+            var norm = LevelScale.Normalize(db);
+            var centerY = startY + (int)Math.Round((1.0 - norm) * barH);
+
+            var left = _dbAxisLabelsLeft[i];
+            var top = centerY - left.Height / 2;
+            var visibleLeft = top >= topBound && top + left.Height <= bottomBound
+                && top >= previousBottomLeft + AXIS_LABEL_MIN_GAP;
+            left.Visible = visibleLeft;
+            if (visibleLeft)
+            {
+                left.Location = new Point(Math.Max(0, marginX - AXIS_LABEL_MIN_GAP - left.PreferredWidth), top);
+                previousBottomLeft = top + left.Height;
+            }
+
+            var right = _dbAxisLabelsRight[i];
+            var visibleRight = top >= topBound && top + right.Height <= bottomBound
+                && top >= previousBottomRight + AXIS_LABEL_MIN_GAP;
+            right.Visible = visibleRight;
+            if (visibleRight)
+            {
+                right.Location = new Point(
+                    Math.Min(containerWidth - right.PreferredWidth, containerWidth - marginX + AXIS_LABEL_MIN_GAP),
+                    top);
+                previousBottomRight = top + right.Height;
+            }
+        }
+    }
+
+    // Center/Mirror fill symmetrically about the bar's vertical middle instead of bottom-up, so their dB axis
+    // must mirror the same way (see DrawMode_CenterBricks/DrawMode_MirrorBricks in VerticalProgressBar.cs):
+    // Center grows from the middle (silence) out to the edges (0 dBFS at full scale), while Mirror grows from
+    // the edges (silence) in to the middle (0 dBFS at full scale) - the exact opposite direction.
+    // "invertedFromCenter" is true for Mirror, flipping which extreme sits at the middle vs. the edges.
+    private static bool IsSymmetricFillMode(string visualMode, out bool invertedFromCenter)
+    {
+        switch ((visualMode ?? string.Empty).Trim().ToLowerInvariant())
+        {
+            case "center":
+                invertedFromCenter = false;
+                return true;
+            case "mirror":
+                invertedFromCenter = true;
+                return true;
+            default:
+                invertedFromCenter = false;
+                return false;
+        }
+    }
+
+    private static void HideDbAxisLabels(Label[] labels)
+    {
+        if (labels == null) return;
+        foreach (var label in labels)
+            if (label != null) label.Visible = false;
+    }
+
+    // Lays out the dB axis for Center/Mirror mode: each landmark's vertical distance from the bar's middle
+    // is proportional to its normalized level (same LevelScale.Normalize used everywhere else), mirrored
+    // above and below centre to match the bar's actual symmetric fill. A landmark whose distance rounds to
+    // zero (the value that sits exactly at the middle) only needs one label, not an overlapping duplicate.
+    private void LayoutDbAxisLabelsSymmetric(
+        int marginX, int startY, int barH, int containerWidth, int topBound, int bottomBound, bool invertedFromCenter)
+    {
+        if (_dbAxisLabelsLeft == null || _dbAxisLabelsRight == null
+            || _dbAxisLabelsLeftMirror == null || _dbAxisLabelsRightMirror == null) return;
+
+        var midY = startY + (barH / 2);
+        var halfBarH = barH / 2f;
+
+        var previousBottomLeft = int.MinValue;
+        var previousBottomRight = int.MinValue;
+        var previousTopLeftMirror = int.MaxValue;
+        var previousTopRightMirror = int.MaxValue;
+
+        // Collision tracking below assumes labels are visited edge-first, walking inward toward the middle
+        // (so each accepted label's bound only ever needs comparing against its immediate, already-placed
+        // neighbour). s_axisLandmarksDb is ordered 0 down to -72, which is already edge-to-middle for Center
+        // (0 dBFS sits at the edge) but middle-to-edge for Mirror (0 dBFS sits at the middle instead) - so
+        // sort explicitly by descending distance-from-middle rather than relying on array order.
+        var order = new int[s_axisLandmarksDb.Length];
+        var distances = new int[s_axisLandmarksDb.Length];
+        for (var i = 0; i < s_axisLandmarksDb.Length; i++)
+        {
+            order[i] = i;
+            var norm = (float)LevelScale.Normalize(s_axisLandmarksDb[i]);
+            if (invertedFromCenter) norm = 1f - norm;
+            distances[i] = (int)Math.Round(halfBarH * norm);
+        }
+        Array.Sort(order, (a, b) => distances[b].CompareTo(distances[a]));
+
+        foreach (var i in order)
+        {
+            var distance = distances[i];
+            var upperCenterY = midY - distance;
+            var lowerCenterY = midY + distance;
+
+            var left = _dbAxisLabelsLeft[i];
+            var top = upperCenterY - left.Height / 2;
+            var visibleLeft = top >= topBound && top + left.Height <= bottomBound
+                && top >= previousBottomLeft + AXIS_LABEL_MIN_GAP;
+            left.Visible = visibleLeft;
+            if (visibleLeft)
+            {
+                left.Location = new Point(Math.Max(0, marginX - AXIS_LABEL_MIN_GAP - left.PreferredWidth), top);
+                previousBottomLeft = top + left.Height;
+            }
+
+            var right = _dbAxisLabelsRight[i];
+            var visibleRight = top >= topBound && top + right.Height <= bottomBound
+                && top >= previousBottomRight + AXIS_LABEL_MIN_GAP;
+            right.Visible = visibleRight;
+            if (visibleRight)
+            {
+                right.Location = new Point(
+                    Math.Min(containerWidth - right.PreferredWidth, containerWidth - marginX + AXIS_LABEL_MIN_GAP),
+                    top);
+                previousBottomRight = top + right.Height;
+            }
+
+            // The mirrored (lower) copy is only needed once the upper/lower positions actually differ.
+            var leftMirror = _dbAxisLabelsLeftMirror[i];
+            var topMirror = lowerCenterY - leftMirror.Height / 2;
+            var visibleLeftMirror = distance > 0 && topMirror >= topBound && topMirror + leftMirror.Height <= bottomBound
+                && topMirror + leftMirror.Height <= previousTopLeftMirror - AXIS_LABEL_MIN_GAP;
+            leftMirror.Visible = visibleLeftMirror;
+            if (visibleLeftMirror)
+            {
+                leftMirror.Location = new Point(Math.Max(0, marginX - AXIS_LABEL_MIN_GAP - leftMirror.PreferredWidth), topMirror);
+                previousTopLeftMirror = topMirror;
+            }
+
+            var rightMirror = _dbAxisLabelsRightMirror[i];
+            var visibleRightMirror = distance > 0 && topMirror >= topBound && topMirror + rightMirror.Height <= bottomBound
+                && topMirror + rightMirror.Height <= previousTopRightMirror - AXIS_LABEL_MIN_GAP;
+            rightMirror.Visible = visibleRightMirror;
+            if (visibleRightMirror)
+            {
+                rightMirror.Location = new Point(
+                    Math.Min(containerWidth - rightMirror.PreferredWidth, containerWidth - marginX + AXIS_LABEL_MIN_GAP),
+                    topMirror);
+                previousTopRightMirror = topMirror;
+            }
         }
     }
 
@@ -292,6 +566,17 @@ public partial class FormAudioSpectrum : Form
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ApplyColorThemeOptimized(VerticalProgressBar progress, BarColorTheme theme)
+    {
+        progress.HeatLowColor = theme.Low;
+        progress.HeatMidColor = theme.Mid;
+        progress.HeatHighColor = theme.High;
+        progress.HeatPeakColor = theme.Peak;
+        progress.HeatIntensityCurve = theme.IntensityCurve;
+        progress.PeakColorMatchesHeat = true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void ApplyMeterPresetOptimized(VerticalProgressBar progress, string mode)
     {
         progress.AnimationFps = 60;
@@ -309,14 +594,14 @@ public partial class FormAudioSpectrum : Form
             case "bricks":
                 progress.UseAsymmetricBallistics = true;
                 progress.ResponseTimeMs = 110;
-                progress.ReleaseTimeMs = 220;
+                progress.ReleaseTimeMs = 320;
                 progress.PeakHoldMilliseconds = 0;
                 break;
 
             case "dots":
                 progress.UseAsymmetricBallistics = true;
                 progress.ResponseTimeMs = 130;
-                progress.ReleaseTimeMs = 480;
+                progress.ReleaseTimeMs = 620;
                 progress.PeakHoldMilliseconds = 0;
                 break;
 
@@ -332,7 +617,7 @@ public partial class FormAudioSpectrum : Form
             case "ebu":
                 progress.UseAsymmetricBallistics = true;
                 progress.ResponseTimeMs = 90;
-                progress.ReleaseTimeMs = 280;
+                progress.ReleaseTimeMs = 380;
                 progress.PeakHoldMilliseconds = 0;
                 break;
 
@@ -353,14 +638,14 @@ public partial class FormAudioSpectrum : Form
             case "wave":
                 progress.UseAsymmetricBallistics = true;
                 progress.ResponseTimeMs = 110;
-                progress.ReleaseTimeMs = 340;
+                progress.ReleaseTimeMs = 440;
                 progress.PeakHoldMilliseconds = 120;
                 break;
 
             case "pulse":
                 progress.UseAsymmetricBallistics = true;
                 progress.ResponseTimeMs = 130;
-                progress.ReleaseTimeMs = 400;
+                progress.ReleaseTimeMs = 520;
                 progress.PeakHoldMilliseconds = 0;
                 break;
 
@@ -414,5 +699,24 @@ public partial class FormAudioSpectrum : Form
             }
             _axisLabels = null;
         }
+
+        DisposeDbAxisLabels(ref _dbAxisLabelsLeft);
+        DisposeDbAxisLabels(ref _dbAxisLabelsRight);
+        DisposeDbAxisLabels(ref _dbAxisLabelsLeftMirror);
+        DisposeDbAxisLabels(ref _dbAxisLabelsRightMirror);
+    }
+
+    private static void DisposeDbAxisLabels(ref Label[] labels)
+    {
+        if (labels == null) return;
+
+        for (var i = 0; i < labels.Length; i++)
+        {
+            var font = labels[i]?.Font;
+            labels[i]?.Dispose();
+            font?.Dispose();
+            labels[i] = null;
+        }
+        labels = null;
     }
 }

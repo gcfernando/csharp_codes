@@ -356,7 +356,6 @@ public class Ambiance_ThemeContainer : ContainerControl
     }
 
     private readonly Pen _outerBorderPen = new Pen(Color.FromArgb(30, 28, 25));
-    private readonly SolidBrush _bodyBrush = new SolidBrush(Color.FromArgb(12, 12, 12));
     private readonly SolidBrush _separatorBrush = new SolidBrush(Color.FromArgb(82, 75, 60));
     private readonly SolidBrush _titleBrush = new SolidBrush(Color.FromArgb(215, 210, 196));
     private readonly Font _titleFont = new Font("Segoe UI", 9.5f, FontStyle.Regular);
@@ -365,6 +364,9 @@ public class Ambiance_ThemeContainer : ContainerControl
     private LinearGradientBrush _headerBrush;
     private int _headerBrushWidth;
 
+    private LinearGradientBrush _bodyGradientBrush;
+    private Size _bodyGradientSize;
+
     protected override void CreateHandle() => base.CreateHandle();
 
     protected override void Dispose(bool disposing)
@@ -372,12 +374,12 @@ public class Ambiance_ThemeContainer : ContainerControl
         if (disposing)
         {
             _outerBorderPen.Dispose();
-            _bodyBrush.Dispose();
             _separatorBrush.Dispose();
             _titleBrush.Dispose();
             _titleFont.Dispose();
             _titleFormat.Dispose();
             _headerBrush?.Dispose();
+            _bodyGradientBrush?.Dispose();
         }
         base.Dispose(disposing);
     }
@@ -412,7 +414,25 @@ public class Ambiance_ThemeContainer : ContainerControl
 
         G.DrawRectangle(_outerBorderPen, 0, 0, Width - 1, Height - 1);
         G.FillRectangle(_headerBrush, 1, 1, Width - 2, 36);
-        G.FillRectangle(_bodyBrush, 1, 37, Width - 2, Math.Max(0, Height - 47));
+
+        var bodyRect = new Rectangle(1, 37, Math.Max(1, Width - 2), Math.Max(0, Height - 47));
+        if (bodyRect.Width > 0 && bodyRect.Height > 0)
+        {
+            // Subtle top-to-bottom vignette instead of a flat fill, so the panel behind the bars has a hint
+            // of depth rather than looking like a plain gray rectangle.
+            if (_bodyGradientBrush == null || _bodyGradientSize != bodyRect.Size)
+            {
+                _bodyGradientBrush?.Dispose();
+                _bodyGradientBrush = new LinearGradientBrush(
+                    bodyRect,
+                    Color.FromArgb(18, 18, 18),
+                    Color.FromArgb(8, 8, 8),
+                    LinearGradientMode.Vertical);
+                _bodyGradientSize = bodyRect.Size;
+            }
+            G.FillRectangle(_bodyGradientBrush, bodyRect);
+        }
+
         G.FillRectangle(_separatorBrush, 1, 37, Width - 2, 1);
 
         if (_RoundCorners)

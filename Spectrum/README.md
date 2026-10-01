@@ -4,10 +4,12 @@ A .NET Framework 4.8 Windows Forms application that captures your system's audio
 
 ## Features
 
-- **83-bar frequency spectrum** covering 20 Hz – 20 kHz on a logarithmic scale, with a labelled frequency axis
+- **83-bar frequency spectrum** covering 20 Hz – 20 kHz on a logarithmic scale, with a labelled frequency axis (horizontal, bottom) and a labelled level axis (vertical, 0 to -72 dBFS, both sides)
+- **Reference gridlines** at -12/-24/-36/-48/-60 dBFS drawn inside each bar for at-a-glance level reading
 - **Measured band levels** — each bar is the integrated power of its frequency band in dBFS (see *Measurement*)
 - **8 visualization modes** selectable via `App.config`
-- **Heat-map colour gradient** — green (low) → yellow (mid) → red (high)
+- **5 colour themes** selectable via `App.config`, independent of mode
+- **Heat-map colour gradient** with peak markers tinted to match their theme's colour at that height
 - **Peak-hold markers** with configurable hold time and decay
 - **Asymmetric ballistics** — fast attack, slower release per mode
 - **Frame-rate independent animation** — ballistics use elapsed time; analysis runs about every 32 ms (a 25 ms timer at the 15.6 ms Windows timer resolution), display up to 60 fps
@@ -32,6 +34,18 @@ Set the `Mode` key in `App.config`:
 | `Center` | Energy from centre; orchestral / cinematic |
 | `Mirror` | Symmetrical balance; EDM / house music |
 
+## Colour Themes
+
+Set the `Theme` key in `App.config`. Themes control only the bar colour palette and are independent of, and composable with, any `Mode` above.
+
+| Theme | Palette | Best For |
+|---|---|---|
+| `ClassicSmooth` (default) | Green → yellow → orange, red peak | Traditional VU/spectrum look |
+| `Ice` | Deep blue → cyan → white, icy peak | Cool, calm, minimal/ambient aesthetics |
+| `Sunset` | Dark amber → orange → red, pale gold peak | Warm, vibrant, sunset-inspired visuals |
+| `MonoCyan` | Single-hue cyan, brightness-graded, pale cyan peak | Clean, modern, monochrome/studio look |
+| `Synthwave` | Purple → magenta → pink, electric-cyan peak | 80s retro, synthwave, neon party visuals |
+
 ## Configuration
 
 Edit `App.config` in the project directory:
@@ -39,6 +53,7 @@ Edit `App.config` in the project directory:
 ```xml
 <appSettings>
   <add key="Mode" value="Spectrum"/>
+  <add key="Theme" value="ClassicSmooth"/>
 </appSettings>
 ```
 

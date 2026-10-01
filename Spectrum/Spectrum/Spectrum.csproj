@@ -111,6 +111,7 @@
     <Compile Include="Ambiance Theme.cs" />
     <Compile Include="Analyzer.cs" />
     <Compile Include="BarBallistics.cs" />
+    <Compile Include="BarColorThemes.cs" />
     <Compile Include="CaptureGate.cs" />
     <Compile Include="Dsp\BandPlan.cs" />
     <Compile Include="Dsp\BandSpectrumAnalyzer.cs" />

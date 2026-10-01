@@ -287,8 +287,23 @@ public sealed class Analyzer : IDisposable
             return;
         }
 
+        WaitForTickToFinish();
+
         _ = BassWasapi.BASS_WASAPI_Free();
         _ = Bass.BASS_Free();
+    }
+
+    // Bounds the gap between the timer thread (inside BASS_WASAPI_GetLevel/analysis) and teardown on the UI
+    // thread or the IMMNotificationClient callback thread. The tick body is a few BASS calls plus an in-memory
+    // analysis step (no I/O), so a short bounded spin is enough; it avoids calling BASS_WASAPI_Free/BASS_Free
+    // while a tick is still using the handle being freed.
+    private void WaitForTickToFinish()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (Volatile.Read(ref _tickActive) != 0 && sw.ElapsedMilliseconds < 200)
+        {
+            Thread.Sleep(1);
+        }
     }
 
     private void TimerTick(object sender, ElapsedEventArgs e)
@@ -394,7 +409,15 @@ public sealed class Analyzer : IDisposable
         }
         else
         {
-            Free();
+            // No SynchronizationContext to post to: this fallback runs inline on the calling thread, which is
+            // the timer thread itself (TimerTick still holds _tickActive while it runs). Free BASS directly
+            // (bypassing Free()) instead of clearing _tickActive early: clearing it here would make the
+            // in-progress teardown/reinit invisible to a concurrent Dispose() on another thread, letting its
+            // WaitForTickToFinish fall through and call BASS_WASAPI_Free/BASS_Free while this thread is still
+            // using/recreating the same handles. Keeping _tickActive==1 for the whole call (TimerTick's finally
+            // clears it once this method returns) makes a concurrent Dispose() correctly wait instead.
+            _ = BassWasapi.BASS_WASAPI_Free();
+            _ = Bass.BASS_Free();
             _ = Bass.BASS_Init(0, 48000, BASSInit.BASS_DEVICE_DEFAULT, IntPtr.Zero);
             _initialized = false;
             _recovering = false;
@@ -429,6 +452,7 @@ public sealed class Analyzer : IDisposable
         _timer.Dispose();
 
         // Call BASS cleanup directly — Free() checks _disposed and would return early here
+        WaitForTickToFinish();
         _ = BassWasapi.BASS_WASAPI_Free();
         _ = Bass.BASS_Free();
 

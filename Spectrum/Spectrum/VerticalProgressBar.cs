@@ -63,7 +63,8 @@ public sealed class VerticalProgressBar : ProgressBar
     private readonly Pen _borderPen = new(Color.FromArgb(120, 0, 0, 0), 1f);
 
     private readonly SolidBrush _peakBrush = new(Color.White);
-    private Color _cachedPeakColor = Color.Empty;
+
+    private readonly Pen _gridlinePen = new(Color.FromArgb(36, 255, 255, 255), 1f);
 
     private readonly Pen _wavePen = new(Color.Lime, 2f);
     private Color _cachedWaveColor = Color.Empty;
@@ -247,6 +248,25 @@ public sealed class VerticalProgressBar : ProgressBar
     [Category("Peak Hold")]
     public Color PeakLineColor { get; set; } = Color.FromArgb(255, 255, 255);
 
+    // When enabled, the peak marker is tinted to match the heat color at its own height instead of a fixed
+    // color, so the marker reads as "this band's loudest recent moment" rather than a generic indicator.
+    [Category("Peak Hold")]
+    public bool PeakColorMatchesHeat { get; set; } = true;
+
+    // Reference-scale tick lines (e.g. dB landmarks), normalized 0 (bottom/Minimum) .. 1 (top/Maximum), shared
+    // by every bar so they align across the whole meter regardless of each bar's own animated level. Drawn
+    // under the fill, so they only show through the unlit portion above the current level - like the printed
+    // scale on a hardware VU meter.
+    [Category("Appearance")]
+    public IReadOnlyList<float> GridlineLevels { get; set; }
+
+    [Category("Appearance")]
+    public Color GridlineColor
+    {
+        get => _gridlinePen.Color;
+        set { _gridlinePen.Color = value; Invalidate(); }
+    }
+
     private int _animationFps = 60;
 
     [Category("Performance")]
@@ -312,6 +332,7 @@ public sealed class VerticalProgressBar : ProgressBar
             _brickHighlightBrush?.Dispose();
             _borderPen?.Dispose();
             _peakBrush?.Dispose();
+            _gridlinePen?.Dispose();
             _workBrush?.Dispose();
             _brickShadeBrush?.Dispose();
             _wavePen?.Dispose();
@@ -399,6 +420,8 @@ public sealed class VerticalProgressBar : ProgressBar
 
         var innerH = Math.Max(1, bottomInner - topInner);
 
+        DrawGridlines(e.Graphics, innerX, innerW, topInner, bottomInner, innerH);
+
         float range = Math.Max(1, Maximum - Minimum);
         var fillPercent = Clamp01((_displayValue - Minimum) / range);
 
@@ -435,7 +458,8 @@ public sealed class VerticalProgressBar : ProgressBar
         // No marker while the peak sits at the floor: in silence a line at the bottom of every bar is noise, not data.
         if (PeakHoldEnabled && ModeHasPeakMarker(mode) && _peakValue > Minimum + 0.5f)
         {
-            EnsurePeakBrushUpToDate();
+            var peakPercent = Clamp01((Clamp(_peakValue, Minimum, Maximum) - Minimum) / range);
+            _peakBrush.Color = GetPeakColor(peakPercent);
 
             if (mode == VisualizationMode.Dots)
                 DrawPeakMarker_Dot(e.Graphics, bounds, innerX, innerW, topInner, bottomInner, innerH, range);
@@ -728,13 +752,29 @@ public sealed class VerticalProgressBar : ProgressBar
         }
     }
 
-    private void EnsurePeakBrushUpToDate()
+    private void DrawGridlines(Graphics g, int innerX, int innerW, int topInner, int bottomInner, int innerH)
     {
-        if (_cachedPeakColor != PeakLineColor)
+        var levels = GridlineLevels;
+        if (levels == null || levels.Count == 0) return;
+
+        for (var i = 0; i < levels.Count; i++)
         {
-            _cachedPeakColor = PeakLineColor;
-            _peakBrush.Color = PeakLineColor;
+            var t = Clamp01(levels[i]);
+            var y = bottomInner - (int)Math.Round(t * innerH);
+            if (y < topInner || y > bottomInner) continue;
+
+            g.DrawLine(_gridlinePen, innerX, y, innerX + innerW, y);
         }
+    }
+
+    // Heat-matched peak color: the fill color at the peak's own height, lightened for contrast against the
+    // (same-colored) fill sitting just below it.
+    private Color GetPeakColor(float peakPercent)
+    {
+        if (!PeakColorMatchesHeat) return PeakLineColor;
+
+        var heat = GetLevelColor(peakPercent);
+        return LerpRgb(heat, Color.White, 0.5f);
     }
 
     private void DrawPeakMarker_Line(Graphics g, int innerX, int innerW, int topInner, int bottomInner, int innerH, float range)
@@ -859,13 +899,23 @@ public sealed class VerticalProgressBar : ProgressBar
 
     private Color GetLevelColor(float level01)
     {
+        // Apply the same intensity-curve remap RebuildBrickHeatColors uses for the bar fill, so a color
+        // requested for a given height (peak marker, Wave fill/line) matches what the heat-map actually
+        // renders at that same height instead of the plain linear position.
+        var t = level01;
+        if (HeatmapEnabled)
+        {
+            var curve = Math.Max(0.15f, HeatIntensityCurve);
+            t = (float)Math.Pow(Clamp01(level01), 1.0f / curve);
+        }
+
         var c = HeatmapEnabled
-            ? HeatmapColorHsv(level01, HeatLowColor, HeatMidColor, HeatHighColor, HeatPeakColor)
+            ? HeatmapColorHsv(t, HeatLowColor, HeatMidColor, HeatHighColor, HeatPeakColor)
             : (ForeColor.IsEmpty ? Color.LimeGreen : ForeColor);
 
-        if (HeatmapEnabled && TopEmphasisEnabled && level01 >= TopEmphasisStart)
+        if (HeatmapEnabled && TopEmphasisEnabled && t >= TopEmphasisStart)
         {
-            var u = (level01 - TopEmphasisStart) / Math.Max(0.0001f, 1f - TopEmphasisStart);
+            var u = (t - TopEmphasisStart) / Math.Max(0.0001f, 1f - TopEmphasisStart);
             var strength = TopEmphasisStrength * (0.25f + (0.75f * u));
             c = LerpRgb(c, HeatPeakColor, strength);
         }
