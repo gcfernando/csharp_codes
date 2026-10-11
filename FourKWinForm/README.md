@@ -1,6 +1,8 @@
-# FourKWinForm
+# FourKWinForm — High-DPI Windows Forms Example in .NET 8 (C#)
 
-A Windows Forms application targeting .NET 8 that demonstrates high-DPI awareness. The form collects a name and country from two text boxes, then displays a personalised greeting in a message box.
+A minimal C# Windows Forms application targeting .NET 8 that demonstrates **high-DPI awareness** for 4K and other high-resolution displays. It enables `HighDpiMode.SystemAware` through the project's `ApplicationHighDpiMode` setting, so text and controls scale with the Windows display scaling instead of appearing tiny or blurry. The form collects a name and country from two text boxes, then displays a personalised greeting in a message box.
+
+Use it as a starting point when you want to see how a modern .NET 8 WinForms project configures DPI scaling with `ApplicationConfiguration.Initialize()`.
 
 ## Features
 
@@ -57,3 +59,8 @@ FourKWinForm/
 ├── FourKWinForm.csproj
 └── FourKWinForm.sln
 ```
+
+## Related
+
+- [Glass.Message](https://github.com/gcfernando/glass) — a DPI-aware, themed `MessageBox` replacement for Windows Forms that could replace the standard greeting dialog
+- [Back to the C# and .NET code examples](../README.md)
