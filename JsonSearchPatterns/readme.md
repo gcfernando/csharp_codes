@@ -1,6 +1,6 @@
-# JSON Search Patterns
+# JSONPath Query Examples in C# — Newtonsoft.Json SelectTokens Patterns (.NET 6)
 
-A .NET 6 console application demonstrating nine JSONPath query patterns using `Newtonsoft.Json`'s `SelectTokens` method. The project serves as a practical reference for navigating complex, nested JSON structures.
+A .NET 6 console application demonstrating 14 **JSONPath query patterns in C#** using **Newtonsoft.Json**'s `JObject.SelectTokens` method — wildcards, array indexes, recursive descent, filter expressions with `&&` and `||`, and regular-expression matches. The project serves as a practical reference for navigating complex, nested JSON structures.
 
 ## Overview
 
@@ -17,6 +17,7 @@ JSONPath (via `JObject.SelectTokens`) is more expressive than XPath for JSON bec
 | `$.parents[?(@.relationship == 'father' && @.age == 40)]` | Array filter with AND condition |
 | `$..*` | All elements at any depth (recursive descent) |
 | `$..location` | All `location` properties at any depth |
+| `$.communication.addresses.location[*]` | All elements of a nested array, reached by an explicit path |
 | `$.parents..relationship` | Recursive descent within the `parents` subtree |
 | `$..personal..number` | Nested recursive search |
 | `$.parents[0]` | First element of an array by index |
@@ -64,3 +65,16 @@ JsonSearchPatterns/
 ├── JsonSearchPatterns.csproj
 └── JsonSearchPatterns.sln
 ```
+
+## FAQ
+
+**What is the difference between `SelectToken` and `SelectTokens`?**
+`SelectToken` returns a single matching token (or `null`), while `SelectTokens` returns every match as an `IEnumerable<JToken>`. This project uses `SelectTokens` so that wildcard, recursive, and filter queries can return several results.
+
+**Can I run the same queries with System.Text.Json?**
+These examples rely on Newtonsoft.Json's built-in JSONPath support through `SelectTokens`; System.Text.Json does not offer this method.
+
+## Related Examples
+
+- [Python.NET interop — exchanging data between C# and Python](../PythonBridge/readme.md)
+- [Back to all C# and .NET code examples](../README.md)

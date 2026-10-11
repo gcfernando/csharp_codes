@@ -1,6 +1,6 @@
-# MediatR — Azure Functions Demo
+# MediatR CQRS Example with Azure Functions in C# (.NET 8, Clean Architecture)
 
-An Azure Functions v4 solution on .NET 8 that demonstrates the **MediatR** pattern with a clean multi-layer architecture. The solution implements user creation and retrieval through CQRS commands and queries, wired with two MediatR pipeline behaviours.
+An Azure Functions v4 solution on .NET 8 that demonstrates **MediatR** and **CQRS** (Command Query Responsibility Segregation) with a clean multi-layer architecture and **MediatR pipeline behaviours** for logging and performance monitoring. The solution implements user creation and retrieval through CQRS commands and queries, wired with two MediatR pipeline behaviours.
 
 ## Architecture
 
@@ -66,7 +66,7 @@ LoggingBehavior → PerformanceMonitoringBehavior → Handler
 
 | Behaviour | Description |
 |---|---|
-| `LoggingBehavior<TRequest, TResponse>` | Logs the request type name before and after each handler call |
+| `LoggingBehavior<TRequest, TResponse>` | Logs `Handling {request type}` before and `Handled {response type}` after each handler call |
 | `PerformanceMonitoringBehavior<TRequest, TResponse>` | Logs a warning if handler execution exceeds 500 ms |
 
 ## Data Storage
@@ -121,6 +121,8 @@ curl -X POST http://localhost:7094/api/user \
 curl http://localhost:7094/api/user/1
 ```
 
+`GET /api/user/{id}` returns `404 Not Found` when no user has that ID, and both endpoints return `400 Bad Request` for an invalid request.
+
 ## Project Structure
 
 ```
@@ -146,3 +148,15 @@ Mediat/
 │   └── User.cs                        # Id, Name, Email
 └── Mediat.sln
 ```
+
+## Notes
+
+- `Mediat.AzureFunction` references `MediatR.Extensions.Microsoft.DependencyInjection` 11.0.0, while `Mediat.Business` and `Mediat.Infrastructure` reference `MediatR` 12.4.1, which includes the `AddMediatR` registration itself. The separate DI extension package is not needed with MediatR 12 and later.
+- Pipeline behaviours run in registration order, so `LoggingBehavior` wraps `PerformanceMonitoringBehavior`, which wraps the handler.
+
+## Related Examples
+
+- [Keyed dependency injection in Azure Functions](../KeyedService/readme.md)
+- [Azure Functions middleware](../Middleware/README.md)
+- [Durable Functions orchestration](../Durable/readme.md)
+- [Back to all C# and .NET code examples](../README.md)

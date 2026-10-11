@@ -1,13 +1,15 @@
-# Azure Functions Middleware — .NET 6
+# Azure Functions Middleware vs No Middleware — .NET 6 C# Comparison
 
-A side-by-side comparison of two Azure Functions v4 projects on .NET 6: one with middleware (`WithMiddleware`) and one without (`WithoutMiddleware`). Both expose a `SendMessage` HTTP POST endpoint that greets the caller by name, but the middleware version transforms the name to uppercase before the function handler runs.
+A side-by-side comparison of two Azure Functions v4 projects on .NET 6: one using **isolated worker middleware** (`WithMiddleware`, built on `IFunctionsWorkerMiddleware`) and one without middleware (`WithoutMiddleware`, an in-process function). Both expose a `SendMessage` HTTP POST endpoint that greets the caller by name, but the middleware version transforms the name to uppercase before the function handler runs.
 
 ## Projects
 
 | Project | Port | Description |
 |---|---|---|
 | `WithMiddleware` | 7052 | Registers `UppercaseNameMiddleware`; name is uppercased in middleware before reaching the handler |
-| `WithoutMiddleware` | — | No middleware; the raw `name` field from the JSON body is used as-is |
+| `WithoutMiddleware` | 7162 | In-process model (`Microsoft.NET.Sdk.Functions`), no middleware; the raw `name` field from the JSON body is used as-is |
+
+Middleware is a feature of the isolated worker model, which is why the baseline project uses the in-process model.
 
 ## How the Middleware Works
 
@@ -28,7 +30,7 @@ The `SendMessageFunction` then reads `context.Items["updated_body"]` and returns
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
 - A `local.settings.json` in each project (not committed to source control)
 
-### Minimum `local.settings.json`
+### Minimum `local.settings.json` (WithMiddleware)
 
 ```json
 {
@@ -40,6 +42,8 @@ The `SendMessageFunction` then reads `context.Items["updated_body"]` and returns
 }
 ```
 
+For the in-process `WithoutMiddleware` project, set `"FUNCTIONS_WORKER_RUNTIME": "dotnet"` instead of `"dotnet-isolated"`.
+
 ## NuGet Packages (WithMiddleware)
 
 | Package | Version |
@@ -49,11 +53,20 @@ The `SendMessageFunction` then reads `context.Items["updated_body"]` and returns
 | `Microsoft.Azure.Functions.Worker.Sdk` | 1.14.0 |
 | `Newtonsoft.Json` | 13.0.1 |
 
+`WithoutMiddleware` references only `Microsoft.NET.Sdk.Functions` 4.2.0.
+
 ## Running Locally
 
+From the `Middleware` folder:
+
 ```bash
+# With middleware
 cd Dotnet6/WithMiddleware
 func start --port 7052
+
+# Without middleware (separate terminal)
+cd Dotnet6/WithoutMiddleware
+func start --port 7162
 ```
 
 ## Usage
@@ -76,6 +89,15 @@ curl -X POST http://localhost:7052/api/SendMessage \
 
 Response: `Hello name not found.`
 
+```bash
+# Without middleware — name is used as-is
+curl -X POST http://localhost:7162/api/SendMessage \
+  -H "Content-Type: application/json" \
+  -d '{"name": "alice"}'
+```
+
+Response: `Hello, alice. This HTTP triggered function executed successfully.` (with no `name`, it asks you to pass one).
+
 ## Project Structure
 
 ```
@@ -93,3 +115,9 @@ Dotnet6/
 │   └── WithoutMiddleware.csproj
 └── readme.md
 ```
+
+## Related Examples
+
+- [.NET 8 version with exception-handling middleware](../Dotnet8/readme.md)
+- [Azure Functions middleware overview](../README.md)
+- [Back to all C# and .NET code examples](../../README.md)

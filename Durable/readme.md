@@ -1,6 +1,6 @@
-# Durable Functions
+# Azure Durable Functions Examples in C# — Function Chaining with the .NET 8 Isolated Worker
 
-Two Azure Durable Functions v4 demos that demonstrate stateful, chained orchestration pipelines using the isolated worker model on .NET 8.
+Two runnable **Azure Durable Functions** v4 demos that demonstrate stateful, chained orchestration pipelines using the **isolated worker model on .NET 8**. Each demo starts an orchestration from an HTTP trigger, calls one or more activity functions in sequence (the *function chaining* pattern), and waits for the result before responding.
 
 ## Projects
 
@@ -57,4 +57,13 @@ cd DemoTwo
 func start --port 7176
 ```
 
-See each project's own README for detailed usage and endpoint examples.
+See each project's own readme — [DemoOne](./DemoOne/readme.md) and [DemoTwo](./DemoTwo/readme.md) — for detailed usage and endpoint examples.
+
+> **Known issue in DemoTwo:** its HTTP starter currently returns `400 Bad Request` for every request, including valid names. See [DemoTwo's known issue](./DemoTwo/readme.md#known-issue) for the cause and a fix.
+
+## Related Examples
+
+- [Azure Functions middleware (.NET 6 and .NET 8)](../Middleware/README.md)
+- [Keyed dependency injection in Azure Functions](../KeyedService/readme.md)
+- [MediatR and CQRS in Azure Functions](../Mediat/readme.md)
+- [Back to all C# and .NET code examples](../README.md)

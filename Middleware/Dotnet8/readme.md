@@ -1,27 +1,31 @@
-# Azure Functions Middleware — .NET 8
+# Azure Functions Exception Handling Middleware in C# — .NET 8 Isolated Worker
 
-An Azure Functions v4 project on .NET 8 that demonstrates two middleware components working together: `UppercaseNameMiddleware` transforms the request body before the handler, and `ExceptionHandlerMiddleware` catches unhandled exceptions and returns a structured `ProblemDetails` response.
+An Azure Functions v4 project on .NET 8 that demonstrates two **isolated worker middleware** components working together: `UppercaseNameMiddleware` transforms the request body before the handler, and `ExceptionHandlerMiddleware` catches exceptions thrown by the function and returns a structured `ProblemDetails` response with HTTP 400 — a reusable pattern for **global exception handling in Azure Functions**.
 
 ## Middleware Pipeline
+
+Middleware runs in the order it is registered in `Program.cs` (`UseMiddleware<UppercaseNameMiddleware>()` first, then `UseMiddleware<ExceptionHandlerMiddleware>()`):
 
 ```
 HTTP Request
      │
      ▼
-ExceptionHandlerMiddleware   ← wraps the rest; catches exceptions, returns 400 ProblemDetails
+UppercaseNameMiddleware      ← reads body, uppercases "name", stores in context.Items
      │
      ▼
-UppercaseNameMiddleware      ← reads body, uppercases "name", stores in context.Items
+ExceptionHandlerMiddleware   ← wraps the function; catches its exceptions, returns 400 ProblemDetails
      │
      ▼
 SendMessageFunction          ← reads updated_body; throws InvalidProcessException if name not found
 ```
 
+Because `ExceptionHandlerMiddleware` is registered second, it does not catch exceptions raised inside `UppercaseNameMiddleware` (for example, a request body that is not valid JSON). Register it first if you want it to wrap the whole pipeline.
+
 ## Components
 
 ### UppercaseNameMiddleware
 
-- Copies the request body to a `MemoryStream` (avoids consuming the stream)
+- Copies the request body into a `MemoryStream` and reads the JSON from that copy
 - Parses JSON and uppercases the `name` property (or sets it to `"name not found"` if absent)
 - Stores the result in `context.Items["updated_body"]`
 - Calls `next.Invoke(context)` to continue the pipeline
@@ -125,3 +129,9 @@ Dotnet8/
     ├── Program.cs                          # Middleware registration order
     └── Middleware.csproj
 ```
+
+## Related Examples
+
+- [.NET 6 comparison: with and without middleware](../Dotnet6/readme.md)
+- [Azure Functions middleware overview](../README.md)
+- [Back to all C# and .NET code examples](../../README.md)

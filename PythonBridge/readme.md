@@ -1,6 +1,6 @@
-# PythonBridge
+# Call Python from C# with Python.NET (pythonnet) — .NET 8 Examples
 
-A .NET 8 console application demonstrating how to call Python code from C# using [Python.NET](https://github.com/pythonnet/pythonnet) (`pythonnet` 3.0.5). The project covers four integration scenarios — from basic arithmetic to ML model inference and launching a FastAPI server.
+A .NET 8 console application demonstrating **how to call Python code from C#** using [Python.NET](https://github.com/pythonnet/pythonnet) (`pythonnet` 3.0.5) — calling Python functions, passing C# objects to Python, running a scikit-learn model, and hosting a FastAPI app from a .NET process. The project covers four integration scenarios — from basic arithmetic to ML model inference and launching a FastAPI server.
 
 ## Overview
 
@@ -32,7 +32,14 @@ Imports `logger.py` inside a named Python scope. Passes C# `LogEntry` objects (`
 
 ### 4. FastAPI Server (`ApiCode.Execute`)
 
-Imports `api.py` (which defines a FastAPI `app`) and starts it with `uvicorn` on `127.0.0.1:8000`.
+Imports `api.py` (which defines a FastAPI `app`) and starts it with `uvicorn` on `127.0.0.1:8000`. The app exposes two GET endpoints:
+
+| Endpoint | Response |
+|---|---|
+| `/` | `{"message": "Hello, World! from Python.NET with FastAPI."}` |
+| `/hello/{name}` | `{"message": "Hello, {name}! from Python.NET with FastAPI."}` |
+
+`uvicorn.run` blocks while the server is running, so the application stays on this step until you stop the server (for example with `Ctrl+C`).
 
 ## Python Scripts (`PyScript/`)
 
@@ -46,7 +53,7 @@ Imports `api.py` (which defines a FastAPI `app`) and starts it with `uvicorn` on
 ## Requirements
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download)
-- **Python 3.12** installed with `python312.dll` accessible (system PATH or application directory)
+- **Python 3.12** installed with `python312.dll` accessible (system PATH or application directory). Each caller sets `Runtime.PythonDLL = "python312.dll"`; change it to match your Python version.
 - Python packages:
 
 ```bash
@@ -66,7 +73,7 @@ cd PythonBridge
 dotnet run
 ```
 
-The application runs all four scenarios sequentially and waits for a key press before exiting.
+The application runs all four scenarios sequentially, then waits for input before exiting. The `PyScript/*.py` files are copied to the build output, and each caller adds that folder to Python's `sys.path` before importing the modules.
 
 ## Project Structure
 
@@ -87,3 +94,14 @@ PythonBridge/
 ├── PythonBridge.csproj
 └── PythonBridge.sln
 ```
+
+## Troubleshooting
+
+- **`Runtime.PythonDLL` / `DllNotFoundException`** — Python.NET cannot find the Python library. Install the matching Python version, or set `Runtime.PythonDLL` to the full path of your `pythonXY.dll`.
+- **`ModuleNotFoundError`** — install the packages listed above into the same Python installation that the DLL belongs to.
+- **Port 8000 already in use** — stop the other process or change the port in `ApiCode.cs`.
+
+## Related Examples
+
+- [The reverse direction: call a C# library from Python](https://github.com/gcfernando/python_codes/blob/main/LoadLibraries/readme.md)
+- [Back to all C# and .NET code examples](../README.md)

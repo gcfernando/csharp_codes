@@ -1,6 +1,6 @@
-# Task Errors — Capturing All Exceptions from Task.WhenAll
+# Task.WhenAll Exception Handling in C# — Capturing All Exceptions (.NET 8)
 
-A .NET 8 console application demonstrating the correct pattern for capturing **all** exceptions thrown by multiple concurrent tasks when using `Task.WhenAll`.
+A .NET 8 console application demonstrating how to **catch every exception from `Task.WhenAll` in C#**, not just the first one, when several concurrent tasks fail.
 
 ## The Problem
 
@@ -60,3 +60,19 @@ TaskErrors/
 ├── TaskErrors.csproj
 └── TaskErrors.sln
 ```
+
+The expected output above was confirmed by running the project.
+
+## FAQ
+
+**Why does `await Task.WhenAll(...)` only throw one exception?**
+`Task.WhenAll` returns a task whose `Exception` is an `AggregateException` containing every failure, but `await` unwraps it and rethrows only the first inner exception. Keeping a reference to the tasks (or to the `WhenAll` task) lets you read all of them afterwards.
+
+**Is there a shorter alternative?**
+You can store the `WhenAll` task in a variable, await it inside `try`, and in the `catch` read `whenAllTask.Exception.InnerExceptions` — it contains the same exceptions as collecting them from each task.
+
+## Related Examples
+
+- [Unit testing ILogger with FakeLogger](../Fake/readme.md)
+- [SemaphoreSlim concurrency example](../SemaphoreSlim/readme.md)
+- [Back to all C# and .NET code examples](../README.md)

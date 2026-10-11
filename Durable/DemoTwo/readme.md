@@ -1,6 +1,6 @@
-# Durable Functions — DemoTwo
+# Azure Durable Functions Function Chaining Example in C# — DemoTwo (.NET 8)
 
-An Azure Durable Functions v4 demo with a three-activity orchestration pipeline. An HTTP trigger starts an orchestrator that chains three activity functions: input validation, processing, and greeting generation.
+An **Azure Durable Functions** v4 example of the **function chaining** pattern in C#. An HTTP trigger starts an orchestrator that calls three activity functions in sequence — input validation with a regular expression, processing, and greeting generation — passing each activity's output to the next one.
 
 ## Architecture
 
@@ -81,7 +81,7 @@ curl -X POST http://localhost:7176/api/func-message-validator \
   -d '{"name": "Alice"}'
 ```
 
-Response: `"Hello Alice!"`
+Intended response: `"Hello Alice!"` — but see [Known issue](#known-issue): the current code returns `400 Bad Request` here too.
 
 **Invalid name (digits or special characters):**
 
@@ -110,3 +110,30 @@ DemoTwo/
 ├── host.json
 └── DemoTwo.csproj
 ```
+
+## Known issue
+
+`FunctionClient.RunAsync` decides whether to return `400` with this check:
+
+```csharp
+if (response.SerializedOutput.Contains(""))
+```
+
+`string.Contains("")` is always `true`, so every request — valid or not — returns an empty `400 Bad Request`. (The `badResponse` object that is written with "Request body cannot be processed." is also never returned.) The orchestration itself runs correctly; only the final status check is wrong.
+
+A fix is to deserialize the output and test for an empty string, for example:
+
+```csharp
+var output = response.ReadOutputAs<string>();
+if (string.IsNullOrEmpty(output))
+{
+    return new BadRequestObjectResult("Request body cannot be processed.");
+}
+return new OkObjectResult(output);
+```
+
+## Related Examples
+
+- [DemoOne — the minimal single-activity version](../DemoOne/readme.md)
+- [Durable Functions overview](../readme.md)
+- [Back to all C# and .NET code examples](../../README.md)

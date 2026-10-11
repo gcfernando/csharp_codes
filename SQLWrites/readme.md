@@ -1,6 +1,6 @@
-# SQL Writes — Three Upsert Strategies
+# SQL Server Upsert in C# — Row-by-Row vs Table-Valued Parameters vs SqlBulkCopy (.NET 10)
 
-A .NET 10 solution demonstrating three production-ready upsert strategies for a `CustomerActivityEvent` record against SQL Server. All strategies are wrapped in a shared transient-fault retry policy.
+A .NET 10 solution comparing three **SQL Server upsert strategies in C#** with `Microsoft.Data.SqlClient` for a `CustomerActivityEvent` record: row-by-row transactions, **table-valued parameters (TVP)** with a stored procedure, and **`SqlBulkCopy`** into a staging table followed by a reconcile procedure. All strategies support an optional optimistic-concurrency check (`rowversion`), ignore out-of-order (older) events, and are wrapped in a shared transient-fault retry policy with exponential backoff.
 
 ## The Data Model
 
@@ -92,15 +92,17 @@ var connectionString = "Data Source=<server>;Initial Catalog=<db>;Integrated Sec
 
 ## Build and Run
 
-```bash
-# Normal strategy demo
-cd SQLWrites/UseNormal && dotnet run
+From the repository root (each command is independent):
 
-# TVP strategy demo
-cd SQLWrites/UseTvp && dotnet run
+```bash
+# Normal strategy demo (upserts a single event)
+dotnet run --project SQLWrites/UseNormal
+
+# TVP strategy demo (sends a batch of 2 000 events)
+dotnet run --project SQLWrites/UseTvp
 
 # Bulk Staging strategy demo (streams 200 000 events)
-cd SQLWrites/UseBulk && dotnet run
+dotnet run --project SQLWrites/UseBulk
 ```
 
 ## Project Structure
@@ -114,7 +116,7 @@ SQLWrites/
 │   ├── CustomerActivityEventWriter.cs            # Normal upsert
 │   └── Program.cs
 ├── UseTvp/
-│   ├── CustomerActivityEventTvpWriter.cs         # TVP batch upsert
+│   ├── CustomerActivityEventWriter.cs            # CustomerActivityEventTvpWriter — TVP batch upsert
 │   └── Program.cs
 ├── UseBulk/
 │   ├── CustomerActivityEventBulkStagingWriter.cs # Bulk copy + reconcile
@@ -123,3 +125,20 @@ SQLWrites/
 ├── Query.sql                  # SQL DDL: tables, types, stored procedures
 └── SQLWrites.sln
 ```
+
+## FAQ
+
+**Which is the fastest way to insert or update many rows in SQL Server from C#?**
+For large volumes, `SqlBulkCopy` into a staging table followed by a set-based reconcile (the `UseBulk` strategy) avoids per-row round trips. TVPs are a good middle ground for batches sent to a stored procedure, and row-by-row upserts are simplest for low volumes. This project does not publish benchmark numbers — measure with your own data and server.
+
+**Why does the insert use `UPDLOCK, HOLDLOCK`?**
+Without those hints, two concurrent sessions can both see that a row is missing and both try to insert it. The hints keep the existence check and the insert consistent under concurrency.
+
+**What happens on a deadlock or timeout?**
+`SqlRetryPolicy` retries transient errors (including deadlock 1205 and timeout -2) with exponential backoff and jitter, up to 5 retries by default.
+
+## Related Examples
+
+- [Contact Book — Python GUI using SQL Server stored procedures](https://github.com/gcfernando/python_codes/blob/main/GUI_Apps/README.md)
+- [Local SQL Server and other databases with Podman Compose](https://github.com/gcfernando/other_codes#-local-services-stack)
+- [Back to all C# and .NET code examples](../README.md)

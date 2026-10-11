@@ -1,6 +1,6 @@
-# Simple Chat Completion — Azure OpenAI Demo
+# Azure OpenAI Chat Completion in C# — Azure.AI.OpenAI SDK vs REST API (.NET 8)
 
-A .NET 8 console application that demonstrates two ways to call an Azure OpenAI chat completion endpoint: via the **`Azure.AI.OpenAI` NuGet package** and via a **raw HTTP REST call**. Both approaches use the same system prompt, which instructs the model to extract a product code and attributes from a natural-language query and return structured JSON.
+A .NET 8 console application that demonstrates two ways to call an **Azure OpenAI chat completion** endpoint from C#: via the **`Azure.AI.OpenAI` NuGet package** and via a **raw HTTP REST call**. Both approaches use the same system prompt, which instructs the model to extract a product code and attributes from a natural-language query and return structured JSON.
 
 ## Overview
 
@@ -39,11 +39,11 @@ All connection settings are defined in `Configuration.cs`:
 | `Version` | API version (`2024-08-01-preview`) |
 | `SystemMessage` | System prompt for product code extraction |
 
-> **Note:** The API key is stored in source code for this demo. In production, use environment variables or Azure Key Vault.
+> **Security note:** Do not commit a real API key. Keep `Key` empty or a placeholder in source control, and supply the key at run time — for example from an environment variable, .NET user secrets, or Azure Key Vault — or use Microsoft Entra ID authentication instead of a key. If a real key has ever been committed, rotate it in the Azure portal.
 
 ## Sample Data
 
-`Data/6205.json` contains SKF bearing specifications for part number 6205, used as reference context for the product query demo.
+`Data/6205.json` contains SKF bearing specifications for part number 6205. It is copied to the build output as sample reference data, but the current code does not read it or send it to the model — the model only extracts the product code and attributes from the question.
 
 ## Requirements
 
@@ -64,7 +64,9 @@ cd Simple_ChatCompletion
 dotnet run
 ```
 
-## Expected Output
+## Example Output
+
+Model responses can vary between runs and deployments; a typical run looks like this:
 
 ```
 ** Package Demo **
@@ -91,3 +93,16 @@ Simple_ChatCompletion/
 ├── Simple_ChatCompletion.csproj
 └── Simple_ChatCompletion.sln
 ```
+
+## FAQ
+
+**Should I use the SDK or the REST API?**
+The `Azure.AI.OpenAI` SDK gives typed requests and responses and handles authentication options for you. The raw REST call shows exactly what goes over the wire and works from any HTTP client; it is useful for debugging or when you cannot take an SDK dependency.
+
+**What is the `Model` setting?**
+In Azure OpenAI, requests target a *deployment name* that you create in your resource. This demo expects a deployment named `gpt-4o-mini`.
+
+## Related Examples
+
+- [Local AI chat app with Ollama and Streamlit](https://github.com/gcfernando/document/blob/main/local_ai_learning_lab.md)
+- [Back to all C# and .NET code examples](../README.md)

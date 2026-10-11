@@ -1,6 +1,6 @@
-# PublicIP
+# Get Your Public IP Address in C# — HttpClient and the ipify API (.NET 6)
 
-A minimal .NET 6 console application that fetches and displays your public IP address using the [ipify](https://www.ipify.org/) API.
+A minimal .NET 6 console application that shows **how to get your public IP address in C#**: it calls the [ipify](https://www.ipify.org/) API with `HttpClient` and prints the result.
 
 ## How It Works
 
@@ -32,3 +32,13 @@ PublicIP/
 ├── PublicIP.csproj
 └── PublicIP.sln
 ```
+
+## Notes
+
+- The request uses plain `http://api.ipify.org`. ipify also offers `https://api.ipify.org`, and `https://api64.ipify.org` for IPv6 where available.
+- The code creates one `HttpClient` for a single request, which is fine for a console demo. In long-running applications, reuse `HttpClient` or use `IHttpClientFactory`.
+
+## Related Examples
+
+- [Python internet speed test](https://github.com/gcfernando/python_codes/blob/main/Internet%20Speed%20Test/readme.md)
+- [Back to all C# and .NET code examples](../README.md)

@@ -1,6 +1,6 @@
-# FakeLogger Testing Demo
+# Unit Testing ILogger with FakeLogger in C# — .NET 8 MSTest Example
 
-A .NET 8 solution demonstrating how to use `FakeLogger<T>` from `Microsoft.Extensions.Diagnostics.Testing` to write unit tests for code that depends on `ILogger`.
+A .NET 8 solution demonstrating how to **unit test logging in C#** with `FakeLogger<T>` from the `Microsoft.Extensions.Diagnostics.Testing` package. It shows how to assert on log messages and log levels written through `ILogger<T>` — without a mocking library, custom test doubles, or capturing console output.
 
 ## Overview
 
@@ -77,3 +77,19 @@ Fake/
 │   └── Fake.Test.csproj
 └── Fake.sln
 ```
+
+`Fake.Data` also contains a small console `Program.cs` that runs the calculator with a console logger, so you can see the same log messages outside the tests.
+
+## FAQ
+
+**Why use `FakeLogger<T>` instead of mocking `ILogger`?**
+`ILogger.Log` is a generic method that is awkward to verify with mocking libraries. `FakeLogger<T>` is a real `ILogger<T>` implementation that records every entry, so tests can read `LatestRecord` and assert on the message, level, and exception directly.
+
+**Does `FakeLogger` work with xUnit or NUnit?**
+Yes. It comes from the `Microsoft.Extensions.Diagnostics.Testing` package and does not depend on a test framework; this demo happens to use MSTest.
+
+## Related Examples
+
+- [Nilog](https://github.com/gcfernando/nilog) — zero-allocation `ILogger` extensions for high-performance logging
+- [Capturing all exceptions from Task.WhenAll](../TaskErrors/readme.md)
+- [Back to all C# and .NET code examples](../README.md)

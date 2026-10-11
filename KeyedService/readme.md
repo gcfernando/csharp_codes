@@ -1,6 +1,6 @@
-# Keyed Services — Azure Functions Demo
+# Keyed Services in .NET 8 Dependency Injection — Azure Functions Example (C#)
 
-An Azure Functions v4 demo on .NET 8 that demonstrates **keyed dependency injection** (`AddKeyedScoped` / `[FromKeyedServices]`). Three HTTP endpoints each receive a different implementation of `INotification` injected by its registered key.
+An Azure Functions v4 demo on .NET 8 that demonstrates **keyed dependency injection** (`AddKeyedScoped` / `[FromKeyedServices]`) in the isolated worker model. Three HTTP endpoints each receive a different implementation of the same `INotification` interface, selected by its registered key — a way to choose between email, SMS, and push strategies without writing a factory class.
 
 ## Overview
 
@@ -84,6 +84,8 @@ curl http://localhost:7194/api/smsnotificationfunction
 
 Each returns a plain-text confirmation such as `notification sent [EMAIL]`.
 
+The `EmailNotification`, `PushNotification`, and `SmsNotification` implementations only log the message (they await `Task.CompletedTask`); replace them with real email, push, or SMS providers in your own application.
+
 ## Project Structure
 
 ```
@@ -105,3 +107,18 @@ KeyedService/
 ├── host.json
 └── KeyedService.csproj
 ```
+
+## FAQ
+
+**What are keyed services in .NET?**
+Introduced in .NET 8, keyed services let you register several implementations of one interface under different keys (`AddKeyedScoped`, `AddKeyedSingleton`, `AddKeyedTransient`) and request a specific one with `[FromKeyedServices("key")]` or `GetRequiredKeyedService<T>("key")`.
+
+**Do keyed services work in Azure Functions?**
+Yes — this project uses them in the .NET 8 isolated worker model with constructor injection into function classes.
+
+## Related Examples
+
+- [MediatR and CQRS in Azure Functions](../Mediat/readme.md)
+- [Azure Functions middleware](../Middleware/README.md)
+- [Durable Functions orchestration](../Durable/readme.md)
+- [Back to all C# and .NET code examples](../README.md)

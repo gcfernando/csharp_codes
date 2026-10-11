@@ -1,6 +1,6 @@
-# Durable Functions — DemoOne
+# Azure Durable Functions Hello World in C# — DemoOne (.NET 8 Isolated Worker)
 
-A minimal Azure Durable Functions v4 demo that runs a single-activity orchestration pipeline. An HTTP trigger receives a JSON body, starts an orchestrator, and the orchestrator calls one activity that returns a personalised greeting.
+A minimal **Azure Durable Functions** v4 example in C# that runs a single-activity orchestration pipeline on the .NET 8 isolated worker. It is a good first step for learning how an HTTP starter (`DurableTaskClient`), an orchestrator (`TaskOrchestrationContext`), and an activity function work together. An HTTP trigger receives a JSON body, starts an orchestrator, and the orchestrator calls one activity that returns a personalised greeting.
 
 ## Architecture
 
@@ -97,3 +97,14 @@ DemoOne/
 ├── host.json
 └── DemoOne.csproj
 ```
+
+## Notes
+
+- The HTTP starter waits for the orchestration to finish (`WaitForInstanceCompletionAsync`) and returns the orchestration's serialized output, which is why the response is the JSON string `"Hello Alice!"` including quotes.
+- Waiting synchronously keeps the demo simple. For long-running workflows, return the orchestration status URLs instead (for example with `CreateCheckStatusResponseAsync`) and let the client poll.
+
+## Related Examples
+
+- [DemoTwo — three chained activities with input validation](../DemoTwo/readme.md)
+- [Durable Functions overview](../readme.md)
+- [Back to all C# and .NET code examples](../../README.md)
