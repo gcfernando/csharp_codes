@@ -74,3 +74,9 @@ The outputs shown above were confirmed by running the project.
 
 - [Nilog](https://github.com/gcfernando/nilog) — a zero-allocation logging library for performance-sensitive .NET code
 - [Back to all C# and .NET code examples](../README.md)
+
+---
+
+## Documentation links
+
+[Read all C# and .NET Code Examples guides online](https://gcfernando.github.io/csharp_codes/documentation/) · [Project overview](https://gcfernando.github.io/csharp_codes/) · [All developer projects](https://gcfernando.github.io/gcfernando/projects/)

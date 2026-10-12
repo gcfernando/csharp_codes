@@ -106,3 +106,9 @@ In Azure OpenAI, requests target a *deployment name* that you create in your res
 
 - [Local AI chat app with Ollama and Streamlit](https://github.com/gcfernando/document/blob/main/local_ai_learning_lab.md)
 - [Back to all C# and .NET code examples](../README.md)
+
+---
+
+## Documentation links
+
+[Read all C# and .NET Code Examples guides online](https://gcfernando.github.io/csharp_codes/documentation/) · [Project overview](https://gcfernando.github.io/csharp_codes/) · [All developer projects](https://gcfernando.github.io/gcfernando/projects/)

@@ -78,3 +78,9 @@ These examples rely on Newtonsoft.Json's built-in JSONPath support through `Sele
 
 - [Python.NET interop — exchanging data between C# and Python](../PythonBridge/readme.md)
 - [Back to all C# and .NET code examples](../README.md)
+
+---
+
+## Documentation links
+
+[Read all C# and .NET Code Examples guides online](https://gcfernando.github.io/csharp_codes/documentation/) · [Project overview](https://gcfernando.github.io/csharp_codes/) · [All developer projects](https://gcfernando.github.io/gcfernando/projects/)

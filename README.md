@@ -153,3 +153,9 @@ If you want to explore the repo in a more hands-on way, start with:
 <div align="center">
   <p><strong>Happy coding! 💻✨</strong></p>
 </div>
+
+---
+
+## Documentation links
+
+[Read all C# and .NET Code Examples guides online](https://gcfernando.github.io/csharp_codes/documentation/) · [Project overview](https://gcfernando.github.io/csharp_codes/) · [All developer projects](https://gcfernando.github.io/gcfernando/projects/)

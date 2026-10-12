@@ -117,3 +117,9 @@ defaults:
     values:
       title: "Unsafe.As in C# — Reinterpret Memory Without Copying (.NET 8 Examples)"
       description: "A .NET 8 console application demonstrating System.Runtime.CompilerServices.Unsafe.As() — a zero-copy way to reinterpret memory in C#, treating the bytes of one type as another without…"
+
+# Public documentation navigation and presentation.
+repository: gcfernando/csharp_codes
+theme: jekyll-theme-primer
+projects_hub: https://gcfernando.github.io/gcfernando/projects/
+project_category: "Learn & reference"
