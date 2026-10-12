@@ -1,0 +1,119 @@
+# GitHub Pages documentation site; does not configure application deployment.
+url: "https://gcfernando.github.io"
+baseurl: "/csharp_codes"
+title: "C# and .NET Code Examples"
+description: "C# and .NET examples for Azure Functions, async programming, dependency injection, SQL Server, testing and desktop applications."
+lang: "en"
+plugins:
+  - jekyll-sitemap
+exclude:
+  - packages
+  - bin
+  - obj
+  - node_modules
+  - vendor
+  - tests
+  - .claude
+  - .agents
+  - .codex
+defaults:
+  - scope:
+      path: "Durable/DemoOne/readme.md"
+    values:
+      title: "Azure Durable Functions Hello World in C# — DemoOne (.NET 8 Isolated Worker)"
+      description: "A minimal Azure Durable Functions v4 example in C# that runs a single-activity orchestration pipeline on the .NET 8 isolated worker. It is a good first step for learning how an HTTP…"
+  - scope:
+      path: "Durable/DemoTwo/readme.md"
+    values:
+      title: "Azure Durable Functions Function Chaining Example in C# — DemoTwo (.NET 8)"
+      description: "An Azure Durable Functions v4 example of the function chaining pattern in C#. An HTTP trigger starts an orchestrator that calls three activity functions in sequence — input validation…"
+  - scope:
+      path: "Durable/readme.md"
+    values:
+      title: "Azure Durable Functions Examples in C# — Function Chaining with the .NET 8 Isolated Worker"
+      description: "Two runnable Azure Durable Functions v4 demos that demonstrate stateful, chained orchestration pipelines using the isolated worker model on .NET 8. Each demo starts an orchestration from…"
+  - scope:
+      path: "Fake/readme.md"
+    values:
+      title: "Unit Testing ILogger with FakeLogger in C# — .NET 8 MSTest Example"
+      description: "A .NET 8 solution demonstrating how to unit test logging in C# with FakeLogger from the Microsoft.Extensions.Diagnostics.Testing package. It shows how to assert on log messages and log…"
+  - scope:
+      path: "FourKWinForm/README.md"
+    values:
+      title: "FourKWinForm — High-DPI Windows Forms Example in .NET 8 (C#)"
+      description: "A minimal C# Windows Forms application targeting .NET 8 that demonstrates high-DPI awareness for 4K and other high-resolution displays. It enables HighDpiMode.SystemAware through the…"
+  - scope:
+      path: "JsonSearchPatterns/readme.md"
+    values:
+      title: "JSONPath Query Examples in C# — Newtonsoft.Json SelectTokens Patterns (.NET 6)"
+      description: "A .NET 6 console application demonstrating 14 JSONPath query patterns in C# using Newtonsoft.Json's JObject.SelectTokens method — wildcards, array indexes, recursive descent, filter…"
+  - scope:
+      path: "KeyedService/readme.md"
+    values:
+      title: "Keyed Services in .NET 8 Dependency Injection — Azure Functions Example (C#)"
+      description: "An Azure Functions v4 demo on .NET 8 that demonstrates keyed dependency injection (AddKeyedScoped / [FromKeyedServices]) in the isolated worker model. Three HTTP endpoints each receive a…"
+  - scope:
+      path: "Mediat/readme.md"
+    values:
+      title: "MediatR CQRS Example with Azure Functions in C# (.NET 8, Clean Architecture)"
+      description: "An Azure Functions v4 solution on .NET 8 that demonstrates MediatR and CQRS (Command Query Responsibility Segregation) with a clean multi-layer architecture and MediatR pipeline…"
+  - scope:
+      path: "Middleware/Dotnet6/readme.md"
+    values:
+      title: "Azure Functions Middleware vs No Middleware — .NET 6 C# Comparison"
+      description: "A side-by-side comparison of two Azure Functions v4 projects on .NET 6: one using isolated worker middleware (WithMiddleware, built on IFunctionsWorkerMiddleware) and one without…"
+  - scope:
+      path: "Middleware/Dotnet8/readme.md"
+    values:
+      title: "Azure Functions Exception Handling Middleware in C# — .NET 8 Isolated Worker"
+      description: "An Azure Functions v4 project on .NET 8 that demonstrates two isolated worker middleware components working together: UppercaseNameMiddleware transforms the request body before the…"
+  - scope:
+      path: "Middleware/README.md"
+    values:
+      title: "Azure Functions Middleware Examples — .NET 6 and .NET 8 Isolated Worker (C#)"
+      description: "Runnable C# examples of Azure Functions middleware with IFunctionsWorkerMiddleware. They show how to intercept an HTTP-triggered function in the .NET isolated worker model, transform the…"
+  - scope:
+      path: "PublicIP/readme.md"
+    values:
+      title: "Get Your Public IP Address in C# — HttpClient and the ipify API (.NET 6)"
+      description: "A minimal .NET 6 console application that shows how to get your public IP address in C#: it calls the ipify API with HttpClient and prints the result."
+  - scope:
+      path: "PythonBridge/readme.md"
+    values:
+      title: "Call Python from C# with Python.NET (pythonnet) — .NET 8 Examples"
+      description: "A .NET 8 console application demonstrating how to call Python code from C# using Python.NET (pythonnet 3.0.5) — calling Python functions, passing C# objects to Python, running a…"
+  - scope:
+      path: "README.md"
+    values:
+      title: "Overview"
+      description: "C# and .NET examples for Azure Functions, async programming, dependency injection, SQL Server, testing and desktop applications."
+  - scope:
+      path: "SemaphoreSlim/readme.md"
+    values:
+      title: "SemaphoreSlim Example in C# — Throttle Concurrent Async Downloads (.NET 8)"
+      description: "A .NET 8 console application demonstrating how to limit concurrency with SemaphoreSlim in C# — throttling the number of asynchronous operations that run at the same time, a common need…"
+  - scope:
+      path: "Simple_ChatCompletion/readme.md"
+    values:
+      title: "Azure OpenAI Chat Completion in C# — Azure.AI.OpenAI SDK vs REST API (.NET 8)"
+      description: "A .NET 8 console application that demonstrates two ways to call an Azure OpenAI chat completion endpoint from C#: via the Azure.AI.OpenAI NuGet package and via a raw HTTP REST call. Both…"
+  - scope:
+      path: "SpectreDemo/readme.md"
+    values:
+      title: "Spectre.Console Example in C# — Live Panels, Progress Bars and Prompts (.NET 8)"
+      description: "A .NET 8 console application demonstrating how to build a rich terminal UI in C# with the Spectre.Console library. The app simulates an interactive data collection workflow with live…"
+  - scope:
+      path: "SQLWrites/readme.md"
+    values:
+      title: "SQL Server Upsert in C# — Row-by-Row vs Table-Valued Parameters vs SqlBulkCopy (.NET 10)"
+      description: "A .NET 10 solution comparing three SQL Server upsert strategies in C# with Microsoft.Data.SqlClient for a CustomerActivityEvent record: row-by-row transactions, table-valued parameters…"
+  - scope:
+      path: "TaskErrors/readme.md"
+    values:
+      title: "Task.WhenAll Exception Handling in C# — Capturing All Exceptions (.NET 8)"
+      description: "A .NET 8 console application demonstrating how to catch every exception from Task.WhenAll in C#, not just the first one, when several concurrent tasks fail."
+  - scope:
+      path: "UnsafeAs/readme.md"
+    values:
+      title: "Unsafe.As in C# — Reinterpret Memory Without Copying (.NET 8 Examples)"
+      description: "A .NET 8 console application demonstrating System.Runtime.CompilerServices.Unsafe.As() — a zero-copy way to reinterpret memory in C#, treating the bytes of one type as another without…"
