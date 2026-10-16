@@ -32,7 +32,7 @@ Or open `FourKWinForm.sln` in Visual Studio and press **F5**.
 2. Enter your name and country in the text boxes.
 3. Click **Message** to display:
 
-```
+```text
 Hello my name is <name>,
 I am from <country>
 ```
@@ -50,7 +50,7 @@ I am from <country>
 
 ## Project Structure
 
-```
+```text
 FourKWinForm/
 ├── HDForm.cs              # Main form logic — button handlers
 ├── HDForm.Designer.cs     # Auto-generated form layout

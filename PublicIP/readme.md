@@ -20,13 +20,13 @@ dotnet run
 
 ## Example Output
 
-```
+```text
 Your public IP Address: 203.0.113.42
 ```
 
 ## Project Structure
 
-```
+```text
 PublicIP/
 ├── Program.cs          # Fetches and prints the public IP address
 ├── PublicIP.csproj

@@ -88,7 +88,7 @@ The `EmailNotification`, `PushNotification`, and `SmsNotification` implementatio
 
 ## Project Structure
 
-```
+```text
 KeyedService/
 ├── Functions/
 │   ├── EmailNotificationFunction.cs   # Injects INotification keyed "email"

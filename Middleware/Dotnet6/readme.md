@@ -100,7 +100,7 @@ Response: `Hello, alice. This HTTP triggered function executed successfully.` (w
 
 ## Project Structure
 
-```
+```text
 Dotnet6/
 ├── WithMiddleware/
 │   ├── Functions/

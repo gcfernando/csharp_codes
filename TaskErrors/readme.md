@@ -47,14 +47,14 @@ dotnet run
 
 ## Expected Output
 
-```
+```text
 Custom Error Method One
 Custom Error Method Two
 ```
 
 ## Project Structure
 
-```
+```text
 TaskErrors/
 ├── Program.cs          # Two throwing async methods + WhenAll error capture pattern
 ├── TaskErrors.csproj

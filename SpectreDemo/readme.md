@@ -35,7 +35,7 @@ dotnet run
 
 ## Project Structure
 
-```
+```text
 SpectreDemo/
 ├── Program.cs          # Full application — live panel, progress bar, selection prompt
 ├── SpectreDemo.csproj

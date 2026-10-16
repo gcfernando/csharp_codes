@@ -6,7 +6,7 @@ An Azure Functions v4 project on .NET 8 that demonstrates two **isolated worker 
 
 Middleware runs in the order it is registered in `Program.cs` (`UseMiddleware<UppercaseNameMiddleware>()` first, then `UseMiddleware<ExceptionHandlerMiddleware>()`):
 
-```
+```text
 HTTP Request
      │
      ▼
@@ -115,7 +115,7 @@ Response:
 
 ## Project Structure
 
-```
+```text
 Dotnet8/
 └── Middleware/
     ├── Functions/

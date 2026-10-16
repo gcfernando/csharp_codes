@@ -3,13 +3,13 @@
   <p><strong>Small, runnable C#/.NET projects that each demonstrate one practical pattern: Azure Functions, dependency injection, async concurrency, SQL Server writes, Windows Forms, terminal UI, and AI integration.</strong></p>
 </div>
 
-# Overview
+## Overview
 
 This repository is a hands-on collection of **C# code examples** for **.NET 6, .NET 8, and .NET 10**. Each project is intentionally small and focused on one concept, so you can read the code, run it, and reuse the pattern in your own application.
 
 Topics include **Azure Functions isolated worker middleware**, **Durable Functions orchestration**, **keyed dependency injection**, **MediatR / CQRS**, **`SemaphoreSlim` throttling**, **`Task.WhenAll` exception handling**, **SQL Server bulk copy and table-valued parameter upserts**, **`FakeLogger` unit testing**, **JSONPath queries**, **`Unsafe.As`**, **Spectre.Console**, **Python.NET interop**, and **Azure OpenAI chat completion**.
 
-> Think of it as a learning vault where each folder is a mini lab.
+Use the project table to choose an example, then follow that folder's README for setup, configuration and known limitations.
 
 ## Project Highlights
 

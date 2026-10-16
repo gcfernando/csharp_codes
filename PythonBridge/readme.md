@@ -77,7 +77,7 @@ The application runs all four scenarios sequentially, then waits for input befor
 
 ## Project Structure
 
-```
+```text
 PythonBridge/
 ├── PyScript/
 │   ├── basic_operations.py      # Arithmetic and greeting functions

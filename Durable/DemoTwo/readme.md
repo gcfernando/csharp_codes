@@ -4,7 +4,7 @@ An **Azure Durable Functions** v4 example of the **function chaining** pattern i
 
 ## Architecture
 
-```
+```text
 POST /api/func-message-validator
           │
           ▼
@@ -95,7 +95,7 @@ Response: `400 Bad Request`
 
 ## Project Structure
 
-```
+```text
 DemoTwo/
 ├── Functions/
 │   ├── FunctionClient.cs          # HTTP trigger — starts orchestration

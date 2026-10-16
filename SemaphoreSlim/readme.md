@@ -49,7 +49,7 @@ dotnet run
 
 ## Project Structure
 
-```
+```text
 SemaphoreSlim/
 ├── Program.cs         # FileDownloader class + Main entry point
 ├── Test.csproj

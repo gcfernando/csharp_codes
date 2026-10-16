@@ -4,7 +4,7 @@ A minimal **Azure Durable Functions** v4 example in C# that runs a single-activi
 
 ## Architecture
 
-```
+```text
 POST /api/func-message-validator
           │
           ▼
@@ -72,19 +72,19 @@ curl -X POST http://localhost:7239/api/func-message-validator \
 
 **Success response:**
 
-```
+```text
 "Hello Alice!"
 ```
 
 **Empty body returns 400:**
 
-```
+```text
 Request body cannot be empty.
 ```
 
 ## Project Structure
 
-```
+```text
 DemoOne/
 ├── Functions/
 │   ├── FunctionClient.cs          # HTTP trigger — starts orchestration

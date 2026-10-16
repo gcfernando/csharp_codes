@@ -107,7 +107,7 @@ dotnet run --project SQLWrites/UseBulk
 
 ## Project Structure
 
-```
+```text
 SQLWrites/
 ├── Common/
 │   ├── Model.cs               # CustomerActivityEvent record

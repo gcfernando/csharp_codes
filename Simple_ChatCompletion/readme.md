@@ -68,7 +68,7 @@ dotnet run
 
 Model responses can vary between runs and deployments; a typical run looks like this:
 
-```
+```text
 ** Package Demo **
 {"product": "6205", "attributes": ["Sealing", "Matched arrangement"]}
 I am sorry, I cannot help with your request. Your question is not related to products.
@@ -80,7 +80,7 @@ I am sorry, I cannot help with your request. Your question is not related to pro
 
 ## Project Structure
 
-```
+```text
 Simple_ChatCompletion/
 ├── ConnectByPackage/
 │   └── PackageDemo.cs       # SDK-based chat completion

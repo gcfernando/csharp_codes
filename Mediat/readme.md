@@ -4,7 +4,7 @@ An Azure Functions v4 solution on .NET 8 that demonstrates **MediatR** and **CQR
 
 ## Architecture
 
-```
+```text
 HTTP Request
      │
      ▼
@@ -22,7 +22,7 @@ Mediat.Model             ← User entity
 
 Pipeline behaviours (Mediat.Infrastructure) wrap every handler call:
 
-```
+```text
 LoggingBehavior → PerformanceMonitoringBehavior → Handler
 ```
 
@@ -125,7 +125,7 @@ curl http://localhost:7094/api/user/1
 
 ## Project Structure
 
-```
+```text
 Mediat/
 ├── Mediat.AzureFunction/
 │   ├── CreateUserFunction.cs          # POST /api/user

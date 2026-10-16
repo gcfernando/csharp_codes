@@ -67,7 +67,7 @@ dotnet test
 
 ## Project Structure
 
-```
+```text
 Fake/
 ├── Fake.Data/
 │   ├── Calculate.cs        # Class under test — Divide method with ILogger

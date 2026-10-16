@@ -14,7 +14,7 @@ A .NET 8 console application demonstrating `System.Runtime.CompilerServices.Unsa
 
 Reinterprets a `long` value as a reference to its first 4 bytes as `int`. Modifying through the `int` reference updates the original `long` value's low 32 bits.
 
-```
+```text
 Original long value: 42
 As int (first 4 bytes): 42
 As int (second 4 bytes): 0
@@ -25,7 +25,7 @@ After modifying through int reference, long value: 100
 
 Reinterprets a `struct PointFloat { float X; float Y; }` as `PointInt { int X; int Y; }`. The displayed integer values are the raw IEEE 754 bit patterns of the float values.
 
-```
+```text
 Original: (1, 2)
 As PointInt: (1065353216, 1073741824)
 ```
@@ -34,7 +34,7 @@ As PointInt: (1065353216, 1073741824)
 
 Gets a `ref long` to the first element of a `byte[8]` array and reads or writes all 8 bytes at once through a single 64-bit write.
 
-```
+```text
 Original bytes: [01, 02, 03, 04, 05, 06, 07, 08]
 As long: 578437695752307201
 After modification: [01, 02, 03, 04, 05, 06, 07, 08]
@@ -55,7 +55,7 @@ dotnet run
 
 ## Project Structure
 
-```
+```text
 UnsafeAs/
 ├── Program.cs         # Four Unsafe.As examples (shown as three sections above)
 ├── PointFloat.cs      # struct PointFloat { float X; float Y; }

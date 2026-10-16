@@ -57,7 +57,7 @@ The application prints the results of each query to the console, separated by bl
 
 ## Project Structure
 
-```
+```text
 JsonSearchPatterns/
 ├── Data.json               # Sample person JSON document
 ├── FileHandler.cs          # Reads Data.json and runs SelectTokens queries
