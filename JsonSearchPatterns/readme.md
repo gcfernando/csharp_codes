@@ -4,7 +4,7 @@ A .NET 6 console application demonstrating 14 **JSONPath query patterns in C#** 
 
 ## Overview
 
-JSONPath (via `JObject.SelectTokens`) is more expressive than XPath for JSON because it natively understands JSON arrays, nested objects, and filter expressions. This project runs several distinct queries against a sample person record (`Data.json`) and prints the results to the console.
+JSONPath (via `JObject.SelectTokens`) selects values directly from JSON objects and arrays, including nested properties and filter expressions. This project runs fourteen queries against a sample person record (`Data.json`) and prints the results to the console.
 
 ## Query Patterns Demonstrated
 

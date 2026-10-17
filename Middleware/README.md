@@ -8,9 +8,9 @@ There are two versions: a **.NET 6** comparison of the same function written wit
 
 | Folder | Target | Hosting model | Description |
 |---|---|---|---|
-| [Dotnet6/WithoutMiddleware](./Dotnet6/WithoutMiddleware) | .NET 6, Functions v4 | In-process (`Microsoft.NET.Sdk.Functions`) | Baseline: the function reads the `name` from the request itself, with no middleware |
-| [Dotnet6/WithMiddleware](./Dotnet6/WithMiddleware) | .NET 6, Functions v4 | Isolated worker | `UppercaseNameMiddleware` parses and uppercases the `name` before the function runs |
-| [Dotnet8/Middleware](./Dotnet8/Middleware) | .NET 8, Functions v4 | Isolated worker (ASP.NET Core integration) | `UppercaseNameMiddleware` plus `ExceptionHandlerMiddleware` and a custom error-response utility |
+| [Dotnet6/WithoutMiddleware](https://github.com/gcfernando/csharp_codes/tree/main/Middleware/Dotnet6/WithoutMiddleware) | .NET 6, Functions v4 | In-process (`Microsoft.NET.Sdk.Functions`) | Baseline: the function reads the `name` from the request itself, with no middleware |
+| [Dotnet6/WithMiddleware](https://github.com/gcfernando/csharp_codes/tree/main/Middleware/Dotnet6/WithMiddleware) | .NET 6, Functions v4 | Isolated worker | `UppercaseNameMiddleware` parses and uppercases the `name` before the function runs |
+| [Dotnet8/Middleware](https://github.com/gcfernando/csharp_codes/tree/main/Middleware/Dotnet8/Middleware) | .NET 8, Functions v4 | Isolated worker (ASP.NET Core integration) | `UppercaseNameMiddleware` plus `ExceptionHandlerMiddleware` and a custom error-response utility |
 
 Middleware is only available in the isolated worker model, which is why the .NET 6 baseline uses the in-process model for comparison.
 

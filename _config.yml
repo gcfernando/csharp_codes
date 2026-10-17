@@ -20,58 +20,58 @@ defaults:
   - scope:
       path: "Durable/DemoOne/readme.md"
     values:
-      title: "Azure Durable Functions Hello World in C# — DemoOne (.NET 8 Isolated Worker)"
-      description: "A minimal Azure Durable Functions v4 example in C# that runs a single-activity orchestration pipeline on the .NET 8 isolated worker. It is a good first step for learning how an HTTP…"
+      title: "Azure Durable Functions Hello World in C# (.NET 8)"
+      description: "Run a minimal C# Durable Functions workflow with an HTTP starter, one orchestrator and one activity on the .NET 8 isolated worker."
   - scope:
       path: "Durable/DemoTwo/readme.md"
     values:
-      title: "Azure Durable Functions Function Chaining Example in C# — DemoTwo (.NET 8)"
-      description: "An Azure Durable Functions v4 example of the function chaining pattern in C#. An HTTP trigger starts an orchestrator that calls three activity functions in sequence — input validation…"
+      title: "Azure Durable Functions Chaining Example in C# (.NET 8)"
+      description: "Chain validation, processing and greeting activities in an HTTP-triggered Azure Durable Functions workflow with the .NET 8 isolated worker."
   - scope:
       path: "Durable/readme.md"
     values:
-      title: "Azure Durable Functions Examples in C# — Function Chaining with the .NET 8 Isolated Worker"
-      description: "Two runnable Azure Durable Functions v4 demos that demonstrate stateful, chained orchestration pipelines using the isolated worker model on .NET 8. Each demo starts an orchestration from…"
+      title: "Azure Durable Functions Examples in C# (.NET 8 Isolated Worker)"
+      description: "Learn Azure Durable Functions orchestration with two C# demos: a single-activity workflow and function chaining on the .NET 8 isolated worker."
   - scope:
       path: "Fake/readme.md"
     values:
-      title: "Unit Testing ILogger with FakeLogger in C# — .NET 8 MSTest Example"
-      description: "A .NET 8 solution demonstrating how to unit test logging in C# with FakeLogger from the Microsoft.Extensions.Diagnostics.Testing package. It shows how to assert on log messages and log…"
+      title: "Unit Testing ILogger with FakeLogger in C# (.NET 8)"
+      description: "Test ILogger messages and levels with FakeLogger and MSTest in a .NET 8 C# solution, with assertions that need no mocking library."
   - scope:
       path: "FourKWinForm/README.md"
     values:
       title: "FourKWinForm — High-DPI Windows Forms Example in .NET 8 (C#)"
-      description: "A minimal C# Windows Forms application targeting .NET 8 that demonstrates high-DPI awareness for 4K and other high-resolution displays. It enables HighDpiMode.SystemAware through the…"
+      description: "Build a .NET 8 Windows Forms application with SystemAware high-DPI settings, text inputs and a greeting dialog for high-resolution displays."
   - scope:
       path: "JsonSearchPatterns/readme.md"
     values:
-      title: "JSONPath Query Examples in C# — Newtonsoft.Json SelectTokens Patterns (.NET 6)"
-      description: "A .NET 6 console application demonstrating 14 JSONPath query patterns in C# using Newtonsoft.Json's JObject.SelectTokens method — wildcards, array indexes, recursive descent, filter…"
+      title: "JSONPath Query Examples in C# with Newtonsoft.Json (.NET 6)"
+      description: "Explore 14 Newtonsoft.Json SelectTokens patterns in C#: wildcards, array indexes, recursive descent, filters and regular expressions."
   - scope:
       path: "KeyedService/readme.md"
     values:
-      title: "Keyed Services in .NET 8 Dependency Injection — Azure Functions Example (C#)"
-      description: "An Azure Functions v4 demo on .NET 8 that demonstrates keyed dependency injection (AddKeyedScoped / [FromKeyedServices]) in the isolated worker model. Three HTTP endpoints each receive a…"
+      title: "Keyed Dependency Injection in .NET 8 Azure Functions"
+      description: "Choose email, SMS and push notification implementations by key with AddKeyedScoped and FromKeyedServices in .NET 8 Azure Functions."
   - scope:
       path: "Mediat/readme.md"
     values:
-      title: "MediatR CQRS Example with Azure Functions in C# (.NET 8, Clean Architecture)"
-      description: "An Azure Functions v4 solution on .NET 8 that demonstrates MediatR and CQRS (Command Query Responsibility Segregation) with a clean multi-layer architecture and MediatR pipeline…"
+      title: "MediatR and CQRS with Azure Functions in C# (.NET 8)"
+      description: "Build user commands and queries with MediatR, layered architecture and logging and performance pipeline behaviors in .NET 8 Azure Functions."
   - scope:
       path: "Middleware/Dotnet6/readme.md"
     values:
       title: "Azure Functions Middleware vs No Middleware — .NET 6 C# Comparison"
-      description: "A side-by-side comparison of two Azure Functions v4 projects on .NET 6: one using isolated worker middleware (WithMiddleware, built on IFunctionsWorkerMiddleware) and one without…"
+      description: "Compare .NET 6 Azure Functions with isolated worker middleware and an in-process function, including request transformation and HTTP responses."
   - scope:
       path: "Middleware/Dotnet8/readme.md"
     values:
-      title: "Azure Functions Exception Handling Middleware in C# — .NET 8 Isolated Worker"
-      description: "An Azure Functions v4 project on .NET 8 that demonstrates two isolated worker middleware components working together: UppercaseNameMiddleware transforms the request body before the…"
+      title: "Azure Functions Exception Middleware in C# (.NET 8)"
+      description: "Transform request bodies and return structured ProblemDetails errors with two isolated worker middleware components in .NET 8 Azure Functions."
   - scope:
       path: "Middleware/README.md"
     values:
-      title: "Azure Functions Middleware Examples — .NET 6 and .NET 8 Isolated Worker (C#)"
-      description: "Runnable C# examples of Azure Functions middleware with IFunctionsWorkerMiddleware. They show how to intercept an HTTP-triggered function in the .NET isolated worker model, transform the…"
+      title: "Azure Functions Middleware Examples in C# (.NET 6 and .NET 8)"
+      description: "Compare Azure Functions middleware examples for request transformation, shared context and exception handling in C# on .NET 6 and .NET 8."
   - scope:
       path: "PublicIP/readme.md"
     values:
@@ -80,33 +80,33 @@ defaults:
   - scope:
       path: "PythonBridge/readme.md"
     values:
-      title: "Call Python from C# with Python.NET (pythonnet) — .NET 8 Examples"
-      description: "A .NET 8 console application demonstrating how to call Python code from C# using Python.NET (pythonnet 3.0.5) — calling Python functions, passing C# objects to Python, running a…"
+      title: "Call Python from C# with Python.NET (.NET 8 Examples)"
+      description: "Call Python functions, pass C# objects, run scikit-learn inference and host FastAPI from a .NET 8 console application with Python.NET."
   - scope:
       path: "README.md"
     values:
-      title: "Overview"
+      title: "C# and .NET Examples — Azure Functions, Async and SQL Server"
       description: "C# and .NET examples for Azure Functions, async programming, dependency injection, SQL Server, testing and desktop applications."
   - scope:
       path: "SemaphoreSlim/readme.md"
     values:
-      title: "SemaphoreSlim Example in C# — Throttle Concurrent Async Downloads (.NET 8)"
-      description: "A .NET 8 console application demonstrating how to limit concurrency with SemaphoreSlim in C# — throttling the number of asynchronous operations that run at the same time, a common need…"
+      title: "Limit Async Concurrency with SemaphoreSlim in C# (.NET 8)"
+      description: "Throttle concurrent asynchronous file downloads with SemaphoreSlim in a .NET 8 C# console application and inspect the download workflow."
   - scope:
       path: "Simple_ChatCompletion/readme.md"
     values:
-      title: "Azure OpenAI Chat Completion in C# — Azure.AI.OpenAI SDK vs REST API (.NET 8)"
-      description: "A .NET 8 console application that demonstrates two ways to call an Azure OpenAI chat completion endpoint from C#: via the Azure.AI.OpenAI NuGet package and via a raw HTTP REST call. Both…"
+      title: "Azure OpenAI Chat Completion in C#: SDK and REST (.NET 8)"
+      description: "Compare Azure.AI.OpenAI SDK and REST calls in C# for extracting structured product information from natural-language queries."
   - scope:
       path: "SpectreDemo/readme.md"
     values:
-      title: "Spectre.Console Example in C# — Live Panels, Progress Bars and Prompts (.NET 8)"
-      description: "A .NET 8 console application demonstrating how to build a rich terminal UI in C# with the Spectre.Console library. The app simulates an interactive data collection workflow with live…"
+      title: "Spectre.Console Example in C# (.NET 8)"
+      description: "Build a terminal interface with Spectre.Console live panels, progress bars, selection prompts and colored output in a .NET 8 C# demo."
   - scope:
       path: "SQLWrites/readme.md"
     values:
-      title: "SQL Server Upsert in C# — Row-by-Row vs Table-Valued Parameters vs SqlBulkCopy (.NET 10)"
-      description: "A .NET 10 solution comparing three SQL Server upsert strategies in C# with Microsoft.Data.SqlClient for a CustomerActivityEvent record: row-by-row transactions, table-valued parameters…"
+      title: "SQL Server Upsert in C#: TVP, SqlBulkCopy and Row-by-Row"
+      description: "Compare transactional row-by-row, table-valued parameter and SqlBulkCopy upserts in .NET 10, with rowversion checks and out-of-order event handling."
   - scope:
       path: "TaskErrors/readme.md"
     values:
@@ -115,8 +115,8 @@ defaults:
   - scope:
       path: "UnsafeAs/readme.md"
     values:
-      title: "Unsafe.As in C# — Reinterpret Memory Without Copying (.NET 8 Examples)"
-      description: "A .NET 8 console application demonstrating System.Runtime.CompilerServices.Unsafe.As() — a zero-copy way to reinterpret memory in C#, treating the bytes of one type as another without…"
+      title: "Unsafe.As Memory Reinterpretation in C# (.NET 8)"
+      description: "Explore System.Runtime.CompilerServices.Unsafe.As in C# to reinterpret memory without copying, including examples and type-safety limitations."
 
 # Public documentation navigation and presentation.
 repository: gcfernando/csharp_codes

@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🚀 C# and .NET Code Examples — Azure Functions, Async, SQL Server, MediatR and More ✨</h1>
+  <h1>🚀 C# and .NET Examples — Azure Functions, Async and SQL Server</h1>
   <p><strong>Small, runnable C#/.NET projects that each demonstrate one practical pattern: Azure Functions, dependency injection, async concurrency, SQL Server writes, Windows Forms, terminal UI, and AI integration.</strong></p>
 </div>
 
@@ -18,7 +18,7 @@ Use the project table to choose an example, then follow that folder's README for
 | [Durable](Durable/) | Azure Durable Functions | Stateful, chained orchestration pipelines in the isolated worker model | .NET 8 |
 | [Fake](Fake/) | Logging + unit testing | Testing `ILogger` code with `FakeLogger<T>` from `Microsoft.Extensions.Diagnostics.Testing` and MSTest | .NET 8 |
 | [FourKWinForm](FourKWinForm/) | Windows Forms | High-DPI (`SystemAware`) desktop form | .NET 8 |
-| [JsonSearchPatterns](JsonSearchPatterns/) | JSON processing | Nine JSONPath query patterns with Newtonsoft.Json `SelectTokens` | .NET 6 |
+| [JsonSearchPatterns](JsonSearchPatterns/) | JSON processing | Fourteen JSONPath query patterns with Newtonsoft.Json `SelectTokens` | .NET 6 |
 | [KeyedService](KeyedService/) | Dependency injection | Keyed scoped services (`AddKeyedScoped`, `[FromKeyedServices]`) in Azure Functions | .NET 8 |
 | [Mediat](Mediat/) | CQRS + MediatR | Multi-layer Azure Functions solution with commands, queries, and pipeline behaviours | .NET 8 |
 | [Middleware](Middleware/) | Azure Functions | `IFunctionsWorkerMiddleware` request transformation and exception handling | .NET 6 / .NET 8 |
@@ -117,7 +117,7 @@ It is a reference of focused C#/.NET examples. Each folder answers one practical
 It depends on the project: most target .NET 8, `JsonSearchPatterns`, `PublicIP`, and the `Middleware/Dotnet6` samples target .NET 6, and `SQLWrites` targets .NET 10. `FourKWinForm` requires Windows.
 
 **Are these production-ready libraries?**
-No. They are learning-oriented demos. For production-grade packages, see [Nilog](https://github.com/gcfernando/nilog) (zero-allocation `ILogger` extensions) and [Glass.Message](https://github.com/gcfernando/glass) (a modern WinForms `MessageBox` replacement).
+They are learning-oriented demos with project-specific requirements and limitations. For reusable packages, see [Nilog](https://github.com/gcfernando/nilog) (`ILogger` extensions that reduce call-site allocations) and [Glass.Message](https://github.com/gcfernando/glass) (a modern WinForms `MessageBox` replacement), and review each package's compatibility and limitations.
 
 **Where can I find similar examples in Python?**
 See the companion [Python projects collection](https://github.com/gcfernando/python_codes) — its `LoadLibraries` project shows the reverse direction of `PythonBridge`: calling a .NET library from Python.

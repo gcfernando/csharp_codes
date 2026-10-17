@@ -72,7 +72,7 @@ The outputs shown above were confirmed by running the project.
 
 ## Related Examples
 
-- [Nilog](https://github.com/gcfernando/nilog) — a zero-allocation logging library for performance-sensitive .NET code
+- [Nilog](https://github.com/gcfernando/nilog) — typed `ILogger` extensions that reduce call-site allocations in performance-sensitive .NET code
 - [Back to all C# and .NET code examples](../README.md)
 
 ---
